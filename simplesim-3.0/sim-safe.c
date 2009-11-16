@@ -79,7 +79,8 @@ static struct regs_t regs;
 static struct mem_t *mem = NULL;
 
 /* track number of refs */
-static counter_t sim_num_refs = 0;
+static counter_t sim_num_loads = 0;
+static counter_t sim_num_stores = 0;
 
 /* maximum number of inst's to execute */
 static unsigned int max_insts;
@@ -110,6 +111,17 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
   /* nada */
 }
 
+/* Keep track of what instructions have been issued this cycle in
+* previous runs of the main simulator loop */
+#define ISSUE_WIDTH 2
+size_t instructions_this_cycle_size;
+md_inst_t instructions_this_cycle[ISSUE_WIDTH];
+int registers_written_this_cycle[ISSUE_WIDTH];
+int functional_units_used_this_cycle[ISSUE_WIDTH];
+
+/* execution instruction counter */
+counter_t sim_num_cycles;
+
 /* register simulator-specific statistics */
 void
 sim_reg_stats(struct stat_sdb_t *sdb)
@@ -117,9 +129,15 @@ sim_reg_stats(struct stat_sdb_t *sdb)
   stat_reg_counter(sdb, "sim_num_insn",
 		   "total number of instructions executed",
 		   &sim_num_insn, sim_num_insn, NULL);
-  stat_reg_counter(sdb, "sim_num_refs",
-		   "total number of loads and stores executed",
-		   &sim_num_refs, 0, NULL);
+  stat_reg_counter(sdb, "sim_num_cycles",
+		   "total number of cycles run",
+		   &sim_num_cycles, sim_num_cycles, NULL);
+  stat_reg_counter(sdb, "sim_num_loads",
+		   "total number of loads executed",
+		   &sim_num_loads, 0, NULL);
+  stat_reg_counter(sdb, "sim_num_stores",
+		   "total number of stores executed",
+		   &sim_num_stores, 0, NULL);
   stat_reg_int(sdb, "sim_elapsed_time",
 	       "total simulation time in seconds",
 	       &sim_elapsed_time, 0, NULL);
@@ -134,7 +152,8 @@ sim_reg_stats(struct stat_sdb_t *sdb)
 void
 sim_init(void)
 {
-  sim_num_refs = 0;
+  sim_num_loads = 0;
+  sim_num_stores = 0;
 
   /* allocate and initialize register file */
   regs_init(&regs);
@@ -177,6 +196,47 @@ sim_uninit(void)
 {
   /* nada */
 }
+
+
+/*
+ * configure the instruction decode engine
+ */
+
+#define DNA			(0)
+
+#if defined(TARGET_PISA)
+
+/* general register dependence decoders */
+#define DGPR(N)			(N)
+#define DGPR_D(N)		((N) &~1)
+
+/* floating point register dependence decoders */
+#define DFPR_L(N)		(((N)+32)&~1)
+#define DFPR_F(N)		(((N)+32)&~1)
+#define DFPR_D(N)		(((N)+32)&~1)
+
+/* miscellaneous register dependence decoders */
+#define DHI			(0+32+32)
+#define DLO			(1+32+32)
+#define DFCC			(2+32+32)
+#define DTMP			(3+32+32)
+
+#elif defined(TARGET_ALPHA)
+
+/* general register dependence decoders, $r31 maps to DNA (0) */
+#define DGPR(N)			(31 - (N)) /* was: (((N) == 31) ? DNA : (N)) */
+
+/* floating point register dependence decoders */
+#define DFPR(N)			(((N) == 31) ? DNA : ((N)+32))
+
+/* miscellaneous register dependence decoders */
+#define DFPCR			(0+32+32)
+#define DUNIQ			(1+32+32)
+#define DTMP			(2+32+32)
+
+#else
+#error No ISA target defined...
+#endif
 
 
 /*
@@ -259,6 +319,80 @@ sim_uninit(void)
 /* system call handler macro */
 #define SYSCALL(INST)	sys_syscall(&regs, mem_access, mem, INST, TRUE)
 
+/* This instruction needs to be the first instruction issued in a new
+ * clock cycle, so advance the clock, and clear the list of instructions
+ * run this clock */
+void
+advance_clock(int i)
+{
+    sim_num_cycles += i;
+    instructions_this_cycle_size = 0;
+}
+
+#define PART_A 1
+#define PART_B 2
+#define PART_C 3
+#define PART_D 4
+
+/* Change this to compile for problem 8, parts a, b, c, or d */
+#define HW2_SUBPART PART_D
+
+/* This function checks for any hazards and increments the clock if so,
+ * to simulate a pipeline stall. Otherwise, it just puts instructions
+ * into the current cycle until it is full */
+void
+check_dependencies(int RES, int FLAGS, int O1, int O2, int I1, int I2, int I3) {
+
+#if HW2_SUBPART >= PART_B
+    /* Check for RAW hazards */
+    int i;
+    for (i = 0; i < instructions_this_cycle_size; i++) {
+        int reg = registers_written_this_cycle[i];
+        if (I1 == reg || I2 == reg) {
+            advance_clock(1); /* RAW hazard detected between instructions issued together */
+            break;
+        }
+#if HW2_SUBPART >= PART_C
+        int fu  = functional_units_used_this_cycle[i];
+        if ((RES == WrPort || RES == RdPort) && (fu == WrPort || fu == RdPort)) {
+            /* More than one insruction trying to use memory at once.
+             * Stall */
+            advance_clock(1);
+            break;
+        }
+#endif /*HW2_SUBPART >= PART_C*/
+    }
+#endif /*HW2_SUBPART >= PART_B*/
+
+    /* Record that this instruction was run */
+
+#if HW2_SUBPART >= PART_B
+    registers_written_this_cycle[instructions_this_cycle_size] = O1;
+#endif /*HW2_SUBPART >= PART_B*/
+
+#if HW2_SUBPART >= PART_C
+    functional_units_used_this_cycle[instructions_this_cycle_size] = RES;
+#endif /*HW2_SUBPART >= PART_C*/
+
+    instructions_this_cycle_size++;
+
+#if HW2_SUBPART >= PART_D
+    if (FLAGS & F_CTRL && FLAGS & F_COND) {
+        if (regs.regs_NPC != regs.regs_PC + sizeof(md_inst_t)) {
+            /* Branch was taken (and thus mispredicted). Next
+             * instruction will run in 7 cycles, once we have resolved
+             * the address */
+            advance_clock(7);
+            /* myfprintf(stderr, "A PC: %n; NPC: %n\n", regs.regs_PC, regs.regs_NPC); */
+        }
+    }
+#endif /*HW2_SUBPART >= PART_D*/
+
+    if (instructions_this_cycle_size == ISSUE_WIDTH) {
+        advance_clock(1);
+    }
+}
+
 /* start simulation, program loaded, processor precise state initialized */
 void
 sim_main(void)
@@ -278,6 +412,9 @@ sim_main(void)
   if (dlite_check_break(regs.regs_PC, /* !access */0, /* addr */0, 0, 0))
     dlite_main(regs.regs_PC - sizeof(md_inst_t),
 	       regs.regs_PC, sim_num_insn, &regs, mem);
+
+  sim_num_cycles = 0;
+  instructions_this_cycle_size = 0;
 
   while (TRUE)
     {
@@ -308,6 +445,7 @@ sim_main(void)
 #define DEFINST(OP,MSK,NAME,OPFORM,RES,FLAGS,O1,O2,I1,I2,I3)		\
 	case OP:							\
           SYMCAT(OP,_IMPL);						\
+	      check_dependencies(RES, FLAGS, O1, O2, I1, I2, I3); \
           break;
 #define DEFLINK(OP,MSK,NAME,MASK,SHIFT)					\
         case OP:							\
@@ -336,9 +474,13 @@ sim_main(void)
 
       if (MD_OP_FLAGS(op) & F_MEM)
 	{
-	  sim_num_refs++;
-	  if (MD_OP_FLAGS(op) & F_STORE)
+	  if (MD_OP_FLAGS(op) & F_STORE) {
 	    is_write = TRUE;
+            sim_num_stores++;
+          } else {
+	    is_write = FALSE;
+            sim_num_loads++;
+          }
 	}
 
       /* check for DLite debugger entry condition */

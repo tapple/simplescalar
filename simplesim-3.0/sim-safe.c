@@ -79,7 +79,8 @@ static struct regs_t regs;
 static struct mem_t *mem = NULL;
 
 /* track number of refs */
-static counter_t sim_num_refs = 0;
+static counter_t sim_num_loads = 0;
+static counter_t sim_num_stores = 0;
 
 /* maximum number of inst's to execute */
 static unsigned int max_insts;
@@ -117,9 +118,12 @@ sim_reg_stats(struct stat_sdb_t *sdb)
   stat_reg_counter(sdb, "sim_num_insn",
 		   "total number of instructions executed",
 		   &sim_num_insn, sim_num_insn, NULL);
-  stat_reg_counter(sdb, "sim_num_refs",
-		   "total number of loads and stores executed",
-		   &sim_num_refs, 0, NULL);
+  stat_reg_counter(sdb, "sim_num_loads",
+		   "total number of loads executed",
+		   &sim_num_loads, 0, NULL);
+  stat_reg_counter(sdb, "sim_num_stores",
+		   "total number of stores executed",
+		   &sim_num_stores, 0, NULL);
   stat_reg_int(sdb, "sim_elapsed_time",
 	       "total simulation time in seconds",
 	       &sim_elapsed_time, 0, NULL);
@@ -134,7 +138,8 @@ sim_reg_stats(struct stat_sdb_t *sdb)
 void
 sim_init(void)
 {
-  sim_num_refs = 0;
+  sim_num_loads = 0;
+  sim_num_stores = 0;
 
   /* allocate and initialize register file */
   regs_init(&regs);
@@ -336,9 +341,13 @@ sim_main(void)
 
       if (MD_OP_FLAGS(op) & F_MEM)
 	{
-	  sim_num_refs++;
-	  if (MD_OP_FLAGS(op) & F_STORE)
+	  if (MD_OP_FLAGS(op) & F_STORE) {
 	    is_write = TRUE;
+            sim_num_stores++;
+          } else {
+	    is_write = FALSE;
+            sim_num_loads++;
+          }
 	}
 
       /* check for DLite debugger entry condition */

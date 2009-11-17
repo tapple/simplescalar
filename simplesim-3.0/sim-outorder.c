@@ -163,6 +163,12 @@ static char *cache_dl1_opt;
 /* l1 data cache hit latency (in cycles) */
 static int cache_dl1_lat;
 
+/* l1 data cache miss handling policy. TRUE for blocking, FALSE for lockup-free */
+static int cache_dl1_blocking = FALSE;
+
+/* number of entries in the victim buffer of the l1 data cache */
+static int cache_dl1_victim_size;
+
 /* l2 data cache config, i.e., {<config>|none} */
 static char *cache_dl2_opt;
 
@@ -376,6 +382,9 @@ static struct cache_t *cache_il2;
 /* level 1 data cache, entry level data cache */
 static struct cache_t *cache_dl1;
 
+/* level 1 data cache victim buffer */
+static struct cache_t *cache_dl1_victim;
+
 /* level 2 data cache */
 static struct cache_t *cache_dl2;
 
@@ -432,33 +441,49 @@ dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	      struct cache_blk_t *blk,	/* ptr to block in upper level */
 	      tick_t now)		/* time of access */
 {
+  static tick_t prev_miss_finish_time = 0;
   unsigned int lat;
 
+  if (cache_dl1_victim && cache_probe(cache_dl1_victim, baddr))
+    /* hit in the victim buffer; no extra latency: it's searched in
+     * parallel with the D-Cache. Use cache_probe rather than
+     * cache_access to avoid storing anything to the victim buffer */
+    return 0;
+
   if (cache_dl2)
+    /* access next level of data cache hierarchy */
+    lat = cache_access(cache_dl2, cmd, baddr, NULL, bsize,
+		       /* now */now, /* pudata */NULL, /* repl addr */NULL);
+  else
+    /* access main memory */
+    lat = mem_access_latency(bsize);
+
+  if (cmd == Read)
     {
-      /* access next level of data cache hierarchy */
-      lat = cache_access(cache_dl2, cmd, baddr, NULL, bsize,
-			 /* now */now, /* pudata */NULL, /* repl addr */NULL);
-      if (cmd == Read)
-	return lat;
-      else
-	{
-	  /* FIXME: unlimited write buffers */
-	  return 0;
-	}
+      if (!cache_dl1_blocking || prev_miss_finish_time < now)
+	prev_miss_finish_time = now;
+      return prev_miss_finish_time + lat - now;
     }
   else
     {
-      /* access main memory */
-      if (cmd == Read)
-	return mem_access_latency(bsize);
-      else
-	{
-	  /* FIXME: unlimited write buffers */
-	  return 0;
-	}
+      /* FIXME: unlimited write buffers */
+      return 0;
     }
 }
+
+/* data cache victim buffer miss handler function */
+static unsigned int			/* latency of block access */
+dl1_victim_access_fn(enum mem_cmd cmd,	/* access cmd, Read or Write */
+		     md_addr_t baddr,		/* block address to access */
+		     int bsize,		/* size of block to access */
+		     struct cache_blk_t *blk,	/* ptr to block in upper level */
+		     tick_t now)		/* time of access */
+{
+  /* Nothing happens on victim buffer miss; no latency. However, return
+   * a positive numper just to make a miss detectable */
+  return 1;
+}
+
 
 /* l2 data cache block miss handler function */
 static unsigned int			/* latency of block access */
@@ -760,6 +785,15 @@ sim_reg_options(struct opt_odb_t *odb)
 	      &cache_dl1_lat, /* default */1,
 	      /* print */TRUE, /* format */NULL);
 
+  opt_reg_flag(odb, "-cache:dl1blocking", "l1 miss handling policy. TRUE for blocking, FALSE for lockup-free",
+	       &cache_dl1_blocking, /* default */FALSE,
+	       /* print */TRUE, /* format */NULL);
+
+  opt_reg_int(odb, "-cache:dl1victims",
+	      "number of entries in the victim buffer of the l1 data cache",
+	      &cache_dl1_victim_size, /* default */0,
+	      /* print */TRUE, NULL);
+
   opt_reg_string(odb, "-cache:dl2",
 		 "l2 data cache config, i.e., {<config>|none}",
 		 &cache_dl2_opt, "ul2:1024:64:4:l",
@@ -1004,10 +1038,14 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
     {
       cache_dl1 = NULL;
 
+      /* the level 1 D-cache victim cannot be defined */
+      if (cache_dl1_victim_size != 0)
+	fatal("the l1 data cache must defined if the l1 victim buffer is defined");
       /* the level 2 D-cache cannot be defined */
       if (strcmp(cache_dl2_opt, "none"))
 	fatal("the l1 data cache must defined if the l2 cache is defined");
       cache_dl2 = NULL;
+      cache_dl1_victim = NULL;
     }
   else /* dl1 is defined */
     {
@@ -1017,6 +1055,18 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
       cache_dl1 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			       /* usize */0, assoc, cache_char2policy(c),
 			       dl1_access_fn, /* hit lat */cache_dl1_lat);
+
+      /* is the level 1 D-cache victim buffer defined? */
+      if (cache_dl1_victim_size == 0)
+	cache_dl1_victim = NULL;
+      else if (cache_dl1_victim_size <= 0)
+        fatal("Victim buffer size must be a non-negative number");
+      else
+	{
+	  cache_dl1_victim = cache_create("dl1victim", /* nsets */1, bsize, /* balloc */FALSE,
+				   /* usize */0, /* assoc */cache_dl1_victim_size, LRU,
+				   dl1_victim_access_fn, /* hit lat */cache_dl1_lat);
+	}
 
       /* is the level 2 D-cache defined? */
       if (!mystricmp(cache_dl2_opt, "none"))
@@ -1031,6 +1081,7 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 				   /* usize */0, assoc, cache_char2policy(c),
 				   dl2_access_fn, /* hit lat */cache_dl2_lat);
 	}
+
     }
 
   /* use a level 1 I-cache? */
@@ -1306,6 +1357,8 @@ sim_reg_stats(struct stat_sdb_t *sdb)   /* stats database */
     cache_reg_stats(cache_il2, sdb);
   if (cache_dl1)
     cache_reg_stats(cache_dl1, sdb);
+  if (cache_dl1_victim)
+    cache_reg_stats(cache_dl1_victim, sdb);
   if (cache_dl2)
     cache_reg_stats(cache_dl2, sdb);
   if (itlb)
@@ -2133,6 +2186,7 @@ static void
 ruu_commit(void)
 {
   int i, lat, events, committed = 0;
+  md_addr_t repl_addr;
   static counter_t sim_ret_insn = 0;
 
   /* all values must be retired to the architected reg file in program order */
@@ -2187,6 +2241,10 @@ ruu_commit(void)
 		      /* commit store value to D-cache */
 		      lat =
 			cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
+				     NULL, 4, sim_cycle, NULL, &repl_addr);
+		      if (repl_addr && cache_dl1_victim)
+			/* store the replaced address in the victim buffer */
+			cache_access(cache_dl1_victim, Write, repl_addr,
 				     NULL, 4, sim_cycle, NULL, NULL);
 		      if (lat > cache_dl1_lat)
 			events |= PEV_CACHEMISS;
@@ -2611,6 +2669,7 @@ static void
 ruu_issue(void)
 {
   int i, load_lat, tlb_lat, n_issued;
+  md_addr_t repl_addr;
   struct RS_link *node, *next_node;
   struct res_template *fu;
 
@@ -2733,6 +2792,11 @@ ruu_issue(void)
 				  load_lat =
 				    cache_access(cache_dl1, Read,
 						 (rs->addr & ~3), NULL, 4,
+						 sim_cycle, NULL, &repl_addr);
+				  if (repl_addr && cache_dl1_victim)
+				    /* store the replaced address in the victim buffer */
+				    cache_access(cache_dl1_victim, Read,
+						 repl_addr, NULL, 4,
 						 sim_cycle, NULL, NULL);
 				  if (load_lat > cache_dl1_lat)
 				    events |= PEV_CACHEMISS;

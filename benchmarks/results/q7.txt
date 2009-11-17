@@ -1,0 +1,109 @@
+2. For gcc:
+
+-ruu:size                  16 # register update unit (RUU) size
+sim_IPC                      1.2343 # instructions per cycle
+ruu_occupancy                8.4195 # avg RUU occupancy (insn's)
+ruu_rate                     1.4484 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  5.8128 # avg RUU occupant latency (cycle's)
+ruu_full                     0.2416 # fraction of time (cycle's) RUU was full
+
+
+-ruu:size                  32 # register update unit (RUU) size
+sim_IPC                      1.2583 # instructions per cycle
+ruu_occupancy                9.9352 # avg RUU occupancy (insn's)
+ruu_rate                     1.5526 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  6.3991 # avg RUU occupant latency (cycle's)
+ruu_full                     0.0219 # fraction of time (cycle's) RUU was full
+
+
+-ruu:size                  64 # register update unit (RUU) size
+sim_IPC                      1.2589 # instructions per cycle
+ruu_occupancy               10.0985 # avg RUU occupancy (insn's)
+ruu_rate                     1.5599 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  6.4736 # avg RUU occupant latency (cycle's)
+ruu_full                     0.0012 # fraction of time (cycle's) RUU was full
+
+go:
+
+-ruu:size                  16 # register update unit (RUU) size
+sim_IPC                      1.3212 # instructions per cycle
+ruu_occupancy                8.9279 # avg RUU occupancy (insn's)
+ruu_rate                     1.6856 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  5.2965 # avg RUU occupant latency (cycle's)
+ruu_full                     0.2708 # fraction of time (cycle's) RUU was full
+
+
+-ruu:size                  32 # register update unit (RUU) size
+sim_IPC                      1.3371 # instructions per cycle
+ruu_occupancy               10.1748 # avg RUU occupancy (insn's)
+ruu_rate                     1.8228 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  5.5820 # avg RUU occupant latency (cycle's)
+ruu_full                     0.0037 # fraction of time (cycle's) RUU was full
+
+
+-ruu:size                  64 # register update unit (RUU) size
+sim_IPC                      1.3372 # instructions per cycle
+ruu_occupancy               10.1893 # avg RUU occupancy (insn's)
+ruu_rate                     1.8251 # avg RUU dispatch rate (insn/cycle)
+ruu_latency                  5.5830 # avg RUU occupant latency (cycle's)
+ruu_full                     0.0000 # fraction of time (cycle's) RUU was full
+
+
+3. 
+
+gcc:
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 3 -res:imult 3 -res:memport 3 -res:fpalu 3 -res:fpmult 3 cc1.alpha -O 1stmt.i 
+sim_IPC                      1.1594 # instructions per cycle
+sim_CPI                      0.8625 # cycles per instruction
+sim_exec_BW                  1.3556 # total instructions (mis-spec + committed) per cycle
+
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 6 -decode:width 6 -commit:width 6 -res:ialu 6 -res:imult 6 -res:memport 6 -res:fpalu 6 -res:fpmult 6 cc1.alpha -O 1stmt.i 
+sim_IPC                      1.2745 # instructions per cycle
+sim_CPI                      0.7846 # cycles per instruction
+sim_exec_BW                  1.4935 # total instructions (mis-spec + committed) per cycle
+
+go
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 3 -res:imult 3 -res:memport 3 -res:fpalu 3 -res:fpmult 3 go.alpha 50 9 2stone9.in 
+sim_IPC                      1.2383 # instructions per cycle
+sim_CPI                      0.8076 # cycles per instruction
+sim_exec_BW                  1.5646 # total instructions (mis-spec + committed) per cycle
+
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 6 -decode:width 6 -commit:width 6 -res:ialu 6 -res:imult 6 -res:memport 6 -res:fpalu 6 -res:fpmult 6 go.alpha 50 9 2stone9.in 
+sim_IPC                      1.3693 # instructions per cycle
+sim_CPI                      0.7303 # cycles per instruction
+sim_exec_BW                  1.7438 # total instructions (mis-spec + committed) per cycle
+
+4
+
+gcc
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 3 -res:imult 3 -res:memport 3 -res:fpalu 3 -res:fpmult 3 cc1.alpha -O 1stmt.i 
+-res:ialu                   3 # total number of integer ALU's available
+-res:imult                  3 # total number of integer multiplier/dividers available
+sim_IPC                      1.1594 # instructions per cycle
+sim_CPI                      0.8625 # cycles per instruction
+sim_exec_BW                  1.3556 # total instructions (mis-spec + committed) per cycle
+
+
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 2 -res:imult 2 -res:memport 3 -res:fpalu 3 -res:fpmult 3 cc1.alpha -O 1stmt.i 
+-res:ialu                   2 # total number of integer ALU's available
+-res:imult                  2 # total number of integer multiplier/dividers available
+sim_IPC                      1.1020 # instructions per cycle
+sim_CPI                      0.9075 # cycles per instruction
+sim_exec_BW                  1.3004 # total instructions (mis-spec + committed) per cycle
+
+
+go
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 3 -res:imult 3 -res:memport 3 -res:fpalu 3 -res:fpmult 3 go.alpha 50 9 2stone9.in 
+-res:ialu                   3 # total number of integer ALU's available
+-res:imult                  3 # total number of integer multiplier/dividers available
+sim_IPC                      1.2383 # instructions per cycle
+sim_CPI                      0.8076 # cycles per instruction
+sim_exec_BW                  1.5646 # total instructions (mis-spec + committed) per cycle
+
+sim: command line: ../simplesim-3.0/sim-outorder -issue:width 3 -decode:width 3 -commit:width 3 -res:ialu 2 -res:imult 2 -res:memport 3 -res:fpalu 3 -res:fpmult 3 go.alpha 50 9 2stone9.in 
+-res:ialu                   3 # total number of integer ALU's available
+-res:imult                  3 # total number of integer multiplier/dividers available
+sim_IPC                      1.1710 # instructions per cycle
+sim_CPI                      0.8540 # cycles per instruction
+sim_exec_BW                  1.4961 # total instructions (mis-spec + committed) per cycle
+

@@ -984,11 +984,11 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
   else
     fatal("bad speculative update stage specifier, use {ID|WB}");
 
-  if (ruu_decode_width < 1 || (ruu_decode_width & (ruu_decode_width-1)) != 0)
-    fatal("issue width must be positive non-zero and a power of two");
+  //if (ruu_decode_width < 1 || (ruu_decode_width & (ruu_decode_width-1)) != 0)
+    //fatal("issue width must be positive non-zero and a power of two");
 
-  if (ruu_issue_width < 1 || (ruu_issue_width & (ruu_issue_width-1)) != 0)
-    fatal("issue width must be positive non-zero and a power of two");
+  //if (ruu_issue_width < 1 || (ruu_issue_width & (ruu_issue_width-1)) != 0)
+    //fatal("issue width must be positive non-zero and a power of two");
 
   if (ruu_commit_width < 1)
     fatal("commit width must be positive non-zero");

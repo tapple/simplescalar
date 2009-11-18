@@ -761,6 +761,45 @@ cache_probe(struct cache_t *cp,		/* cache instance to probe */
   return FALSE;
 }
 
+struct cache_blk_t *			/* pointer to the block */
+cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr)		/* address of block to probe */
+{
+  md_addr_t tag = CACHE_TAG(cp, addr);
+  md_addr_t set = CACHE_SET(cp, addr);
+  struct cache_blk_t *blk;
+
+  /* permissions are checked on cache misses */
+
+  if (cp->hsize)
+  {
+    /* higly-associativity cache, access through the per-set hash tables */
+    int hindex = CACHE_HASH(cp, tag);
+    
+    for (blk=cp->sets[set].hash[hindex];
+	 blk;
+	 blk=blk->hash_next)
+    {	
+      if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	  return blk;
+    }
+  }
+  else
+  {
+    /* low-associativity cache, linear search the way list */
+    for (blk=cp->sets[set].way_head;
+	 blk;
+	 blk=blk->way_next)
+    {
+      if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	  return blk;
+    }
+  }
+  
+  /* cache block not found */
+  return NULL;
+}
+
 /* flush the entire cache, returns latency of the operation */
 unsigned int				/* latency of the flush operation */
 cache_flush(struct cache_t *cp,		/* cache instance to flush */
@@ -853,6 +892,59 @@ cache_flush_addr(struct cache_t *cp,	/* cache instance to flush */
 				   CACHE_MK_BADDR(cp, blk->tag, set),
 				   cp->bsize, blk, now+lat);
 	}
+      /* move this block to tail of the way (LRU) list */
+      update_way_list(&cp->sets[set], blk, Tail);
+    }
+
+  /* return latency of the operation */
+  return lat;
+}
+
+unsigned int				/* latency of evict operation */
+cache_evict_addr(struct cache_t *cp,	/* cache instance to flush */
+		 md_addr_t addr,	/* address of block to flush */
+		 tick_t now)		/* time of cache flush */
+{
+  md_addr_t tag = CACHE_TAG(cp, addr);
+  md_addr_t set = CACHE_SET(cp, addr);
+  struct cache_blk_t *blk;
+  int lat = cp->hit_latency; /* min latency to probe cache */
+
+  if (cp->hsize)
+    {
+      /* higly-associativity cache, access through the per-set hash tables */
+      int hindex = CACHE_HASH(cp, tag);
+
+      for (blk=cp->sets[set].hash[hindex];
+	   blk;
+	   blk=blk->hash_next)
+	{
+	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	    break;
+	}
+    }
+  else
+    {
+      /* low-associativity cache, linear search the way list */
+      for (blk=cp->sets[set].way_head;
+	   blk;
+	   blk=blk->way_next)
+	{
+	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	    break;
+	}
+    }
+
+  if (blk)
+    {
+      
+      blk->status &= ~CACHE_BLK_VALID;
+
+      /* blow away the last block to hit */
+      cp->last_tagset = 0;
+      cp->last_blk = NULL;
+
+      
       /* move this block to tail of the way (LRU) list */
       update_way_list(&cp->sets[set], blk, Tail);
     }

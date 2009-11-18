@@ -285,6 +285,10 @@ cache_access(struct cache_t *cp,	/* cache to access */
 int					/* non-zero if access would hit */
 cache_probe(struct cache_t *cp,		/* cache instance to probe */
 	    md_addr_t addr);		/* address of block to probe */
+	    
+struct cache_blk_t *			/* pointer to the block */
+cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr);		/* address of block to probe */
 
 /* flush the entire cache, returns latency of the operation */
 unsigned int				/* latency of the flush operation */
@@ -295,6 +299,11 @@ cache_flush(struct cache_t *cp,		/* cache instance to flush */
    the block flush operation */
 unsigned int				/* latency of flush operation */
 cache_flush_addr(struct cache_t *cp,	/* cache instance to flush */
+		 md_addr_t addr,	/* address of block to flush */
+		 tick_t now);		/* time of cache flush */
+		 
+unsigned int				/* latency of evict operation */
+cache_evict_addr(struct cache_t *cp,	/* cache instance to flush */
 		 md_addr_t addr,	/* address of block to flush */
 		 tick_t now);		/* time of cache flush */
 

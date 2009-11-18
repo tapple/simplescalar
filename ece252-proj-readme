@@ -1,0 +1,5 @@
+One more function, cache_evict(), was added to cache.c (corresponding define is in cache.h). This function will get rid of the block at the given address.
+
+For both load and store, First check L1 (simplescaler will check LSQ first, we don't need to care about it). For we don't want it access L2 when miss L1 now, so I temporally redirect the L1 miss handler to a dummy function which does nothing. If we miss L1, we check our prefetch buffer, if we hit it, we transfer it to L1 (by access L1 again, this time, we use the original L1 miss handler to make sure the data could be loaded to L1), and evict the data from our buffer (by a new function call cache_evict() defined in cache.c). If we miss prefetch buffer, we access L2. If we miss again, something should be done to insert this miss address into the table. This action should be taken at line 3106 and line 2467. 
+
+Besides updating the table, we have to issue the prefetch request periodically, based on the table. These are two things we need to solve now.

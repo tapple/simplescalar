@@ -163,11 +163,15 @@ static char *cache_dl1_opt;
 /* victim buffer associative to l1 data cache, ---ECE 252 HOMEWORK MODIFICATION--- */
 static char *cache_victim_opt;
 
+/*prefetch buffer option*/
+static char *cache_pbuffer_opt;
+
 static int blocking_opt;
 
 /* l1 data cache hit latency (in cycles) */
 static int cache_dl1_lat;
 static int cache_victim_lat;
+static int cache_pbuffer_lat;
 
 /* l2 data cache config, i.e., {<config>|none} */
 static char *cache_dl2_opt;
@@ -241,6 +245,11 @@ static long read_victim_hit_counter=0;
 static long write_dl1_hit_counter=0;
 static long write_victim_hit_counter=0;
 */
+
+static long pbuffer_access_counter=0;
+static long pbuffer_miss_counter=0;
+static long pbuffer_hit_counter=0;
+static long pbuffer_evict_counter=0;
 
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
@@ -403,6 +412,9 @@ static struct cache_t *cache_dl1;
 /* victim buffer associative with la data cache, ---ECE 252 HOMEWORK MODIFICATION--- */
 static struct cache_t *cache_victim;
 
+/* prefetch buffer */
+static struct cache_t *cache_pbuffer;
+
 /* level 2 data cache */
 static struct cache_t *cache_dl2;
 
@@ -460,6 +472,29 @@ victim_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 {	
 	return 100;
 }
+
+static unsigned int
+pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
+	      md_addr_t baddr,		/* block address to access */
+	      int bsize,		/* size of block to access */
+	      struct cache_blk_t *blk,	/* ptr to block in upper level */
+	      tick_t now)		/* time of access */
+{	
+	/* do something here */
+	return 100;
+}
+
+/* dummy l1 d-cache miss handler */
+static unsigned int
+dummy_dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
+	      md_addr_t baddr,		/* block address to access */
+	      int bsize,		/* size of block to access */
+	      struct cache_blk_t *blk,	/* ptr to block in upper level */
+	      tick_t now)		/* time of access */
+	      {
+	      	
+			 return 0;
+			}
 
 /* l1 data cache l1 block miss handler function */
 static unsigned int			/* latency of block access */
@@ -783,6 +818,12 @@ opt_reg_string(odb, "-cache:victim",
 		&cache_victim_opt, "victim:1:32:2:l",
 		TRUE, NULL);
 
+/* prefetch buffer options */
+opt_reg_string(odb, "-cache:pbuffer",
+		"prefetch buffer",
+		&cache_pbuffer_opt, "pbuffer:1:32:2:l",	/* default value TBD */
+		TRUE, NULL);
+
   opt_reg_int(odb, "-blocking",
 		"enable/disable blocking",
 		&blocking_opt, 0,
@@ -813,6 +854,12 @@ opt_reg_string(odb, "-cache:victim",
   opt_reg_int(odb, "-cache:victimlat",
 	      "l1 data cache hit latency (in cycles)",
 	      &cache_victim_lat, /* default */0,
+	      /* print */TRUE, /* format */NULL);
+
+  /* prefetch buffer latency */
+  opt_reg_int(odb, "-cache:pbufferlat",
+	      "prefetch buffer cache hit latency (in cycles)",
+	      &cache_pbuffer_lat, /* default */0,
 	      /* print */TRUE, /* format */NULL);
 
   opt_reg_string(odb, "-cache:dl2",
@@ -1060,6 +1107,7 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
       cache_dl1 = NULL;
 	  /* if cache_dl1 is NULL, so is victim buffer. ---ECE 252 HOMEWORK MODIFICATION--- */
 	  cache_victim = NULL;
+	  cache_pbuffer=NULL;
 
       /* the level 2 D-cache cannot be defined */
       if (strcmp(cache_dl2_opt, "none"))
@@ -1089,6 +1137,23 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 		{
 		printf("no victim buffer\n");
 		cache_victim=NULL;
+		}
+
+	  /* check whether prefetch buffer is defined. --ECE 252 PROJECT MODIFICATION--- */
+	  if (mystricmp(cache_pbuffer_opt, "none"))
+	  {
+	  	/* scan the configuration of prefetch buffer. ---ECE 252 PROJECT MODIFICATION--- */
+	  	if(sscanf(cache_pbuffer_opt, "%[^:]:%d:%d:%d:%c",
+		 name, &nsets, &bsize, &assoc, &c) != 5)
+		fatal("bad pbuffer buffer parms");
+		printf("going to create prefetch buffer\n");
+	  	cache_pbuffer = cache_create(name, nsets, bsize, FALSE,
+					0, assoc, cache_char2policy(c),
+					dl1_access_fn, cache_pbuffer_lat);
+	  }else
+		{
+		printf("no prefetch buffer\n");
+		cache_pbuffer=NULL;
 		}
 
       /* is the level 2 D-cache defined? */
@@ -1379,6 +1444,8 @@ sim_reg_stats(struct stat_sdb_t *sdb)   /* stats database */
     cache_reg_stats(cache_il2, sdb);
   if (cache_dl1)
     cache_reg_stats(cache_dl1, sdb);
+  if (cache_pbuffer)
+    cache_reg_stats(cache_pbuffer, sdb);
   /* register victim buffer if it is defined. --ECE 252 HOMEWORK MODIFICATION--- */
   if (cache_victim)
 	cache_reg_stats(cache_victim, sdb);
@@ -1423,6 +1490,16 @@ stat_reg_counter(sdb, "read victim hit counter",
                    "total number of dl1 miss",
                    &read_victim_hit_counter, 0, NULL);
 */
+
+  /* register counters of prefetch buffer */
+  stat_reg_counter(sdb, "pbuffer access", "num of pbuffer access",
+                   &pbuffer_access_counter, /* initial value */0, /* format */NULL);
+  stat_reg_counter(sdb, "pbuffer hit", "num of pbuffer hit",
+                   &pbuffer_hit_counter, /* initial value */0, /* format */NULL);
+  stat_reg_counter(sdb, "pbuffer miss", "num of pbuffer miss",
+                   &pbuffer_hit_counter, /* initial value */0, /* format */NULL);  
+  stat_reg_counter(sdb, "pbuffer evict", "num of pbuffer evict",
+                   &pbuffer_evict_counter, /* initial value */0, /* format */NULL);                                    
   if (cache_dl2)
     cache_reg_stats(cache_dl2, sdb);
   if (itlb)
@@ -2307,9 +2384,13 @@ ruu_commit(void)
 		      /* commit store value to D-cache */
 			md_addr_t temp;			  
 			md_addr_t *repl_addr=&temp;
+			if(cache_pbuffer)	/* don't access dl2 now even we miss dl1 */
+				cache_dl1->blk_access_fn=dummy_dl1_access_fn;
 		      lat =
 			cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
 				     NULL, 4, sim_cycle, NULL, repl_addr);
+			if(cache_pbuffer)	/* make things back to normal */
+				cache_dl1->blk_access_fn=dl1_access_fn;
 			/*write_dl1_counter++;*/
 		      if (lat > cache_dl1_lat)
 			{
@@ -2349,7 +2430,53 @@ ruu_commit(void)
 						lat=cache_dl1_lat;
 						events=0;
 					}
-				}else 
+				}
+				if(cache_pbuffer) 
+				{
+					pbuffer_access_counter++;
+					int pb_flag=cache_probe(cache_pbuffer, (LSQ[LSQ_head].addr&~3) );
+					if(pb_flag)	/*the data is in prefetch buffer */
+					{
+						pbuffer_hit_counter++;
+						/* now load it to dl1 and evit it from pbuffer */
+						/*
+						int old_miss=cache_dl1->misses;
+						int old_miss=cache_dl1->hits;
+						
+						cache_dl1->blk_access_fn=dummy_dl1_access_fn;
+						cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
+				     NULL, 4, sim_cycle, NULL, NULL);
+				     	cache_dl1->blk_access_fn=dl1_access_fn;
+				     	cache_dl1->misses=old_miss;
+				     	cache_dl1->hits=old_hit;
+				     	*/
+				     	lat=cache_dl1_lat; /*no panalty */
+				     	/* evict the data from prefetch buffer */
+				     	cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
+				     	pbuffer_evict_counter++;
+				     }else
+				     {
+				     	pbuffer_miss_counter++;
+				     	if(cache_dl2)
+				     	{
+				     		int dl2_miss=cache_dl2->misses;
+				     		cache_access(cache_dl2, Write, (LSQ[LSQ_head].addr&~3),
+				     		NULL, 4, sim_cycle, NULL, NULL);
+				     		if(cache_dl2->misses > dl2_miss)	/*we miss the dl2*/
+				     		{
+				     			/* insert the addr into our table, we can also do this in the dl2 miss handler */
+				     		}else
+				     		{
+				     			/* we hit dl2. Due to the infinite write buffer, no latency. Nothing need to be done here */
+				     		}
+				     	}
+				     	events |=PEV_CACHEMISS;
+				     	
+				     }
+						
+						
+				}
+				if(!cache_victim && !cache_pbuffer)
 					events |=PEV_CACHEMISS;
 
 			}
@@ -2899,10 +3026,13 @@ ruu_issue(void)
 				{
 					/*read_dl1_counter++;*/
 				  /* access the cache if non-faulting */
+				  if(cache_pbuffer)
+				  	cache_dl1->blk_access_fn=dummy_dl1_access_fn;
 				  load_lat =
 				    cache_access(cache_dl1, Read,
 						 (rs->addr & ~3), NULL, 4,
 						 sim_cycle, NULL, repl_addr);
+					cache_dl1->blk_access_fn=dl1_access_fn;
 				  if (load_lat > cache_dl1_lat)
 			{
 				blocking_time=sim_cycle+load_lat;
@@ -2940,6 +3070,50 @@ ruu_issue(void)
 					}
 				}else 
 					events |=PEV_CACHEMISS;
+				if(cache_pbuffer)
+				{
+					pbuffer_access_counter++;
+					int pb_flag=cache_probe(cache_pbuffer, (LSQ[LSQ_head].addr&~3) );
+					if(pb_flag)	/*the data is in prefetch buffer */
+					{
+						pbuffer_hit_counter++;
+						/* now load it to dl1 and evit it from pbuffer */
+						/*
+						int old_miss=cache_dl1->misses;
+						int old_miss=cache_dl1->hits;
+						
+						cache_dl1->blk_access_fn=dummy_dl1_access_fn;
+						cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
+				     NULL, 4, sim_cycle, NULL, NULL);
+				     	cache_dl1->blk_access_fn=dl1_access_fn;
+				     	cache_dl1->misses=old_miss;
+				     	cache_dl1->hits=old_hit;
+				     	*/
+				     	load_lat=cache_dl1_lat; /*no panalty */
+				     	/* evict the data from prefetch buffer */
+				     	cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
+				     	pbuffer_evict_counter++;
+				     }else
+				     {
+				     	pbuffer_miss_counter++;
+				     	if(cache_dl2)
+				     	{
+				     		int dl2_miss=cache_dl2->misses;
+				     		load_lat+=cache_access(cache_dl2, Write, (LSQ[LSQ_head].addr&~3),
+				     		NULL, 4, sim_cycle, NULL, NULL);
+				     		if(cache_dl2->misses > dl2_miss)	/*we miss the dl2*/
+				     		{
+				     			/* insert the addr into our table, we can also do this in the dl2 miss handler */
+				     		}else
+				     		{
+				     			/* we hit dl2. Due to the infinite write buffer, no latency. Nothing need to be done here */
+				     		}
+				     	}
+				     	events |=PEV_CACHEMISS;
+				     	
+				     }
+				}
+				
 
 			}
 				}

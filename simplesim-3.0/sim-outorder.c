@@ -160,8 +160,14 @@ static int LSQ_size = 4;
 /* l1 data cache config, i.e., {<config>|none} */
 static char *cache_dl1_opt;
 
+/* victim buffer associative to l1 data cache, ---ECE 252 HOMEWORK MODIFICATION--- */
+static char *cache_victim_opt;
+
+static int blocking_opt;
+
 /* l1 data cache hit latency (in cycles) */
 static int cache_dl1_lat;
+static int cache_victim_lat;
 
 /* l2 data cache config, i.e., {<config>|none} */
 static char *cache_dl2_opt;
@@ -218,6 +224,23 @@ static int res_fpalu;
 
 /* total number of floating point multiplier/dividers available */
 static int res_fpmult;
+
+
+static long dl1_misses=0;
+/*
+static long read_dl1_counter=0;
+static long write_dl1_counter=0;
+static long write_dl1_miss_counter=0;
+static long read_dl1_miss_counter=0;
+static long read_victim_counter=0;
+static long write_victim_counter=0;
+static long read_victim_miss_counter=0;
+static long write_victim_miss_counter=0;
+static long read_dl1_hit_counter=0;
+static long read_victim_hit_counter=0;
+static long write_dl1_hit_counter=0;
+static long write_victim_hit_counter=0;
+*/
 
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
@@ -330,6 +353,8 @@ static counter_t sim_total_branches = 0;
 /* cycle counter */
 static tick_t sim_cycle = 0;
 
+static long blocking_time=0;
+
 /* occupancy counters */
 static counter_t IFQ_count;		/* cumulative IFQ occupancy */
 static counter_t IFQ_fcount;		/* cumulative IFQ full count */
@@ -375,6 +400,8 @@ static struct cache_t *cache_il2;
 
 /* level 1 data cache, entry level data cache */
 static struct cache_t *cache_dl1;
+/* victim buffer associative with la data cache, ---ECE 252 HOMEWORK MODIFICATION--- */
+static struct cache_t *cache_victim;
 
 /* level 2 data cache */
 static struct cache_t *cache_dl2;
@@ -423,6 +450,16 @@ mem_access_latency(int blk_sz)		/* block size accessed */
 /*
  * cache miss handlers
  */
+
+static unsigned int
+victim_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
+	      md_addr_t baddr,		/* block address to access */
+	      int bsize,		/* size of block to access */
+	      struct cache_blk_t *blk,	/* ptr to block in upper level */
+	      tick_t now)		/* time of access */
+{	
+	return 100;
+}
 
 /* l1 data cache l1 block miss handler function */
 static unsigned int			/* latency of block access */
@@ -740,6 +777,19 @@ sim_reg_options(struct opt_odb_t *odb)
 		 &cache_dl1_opt, "dl1:128:32:4:l",
 		 /* print */TRUE, NULL);
 
+  /* victim buffer options ---ECE 252 HOMEWORK MODIFICATION--- */
+opt_reg_string(odb, "-cache:victim",
+		"victim buffer",
+		&cache_victim_opt, "victim:1:32:2:l",
+		TRUE, NULL);
+
+  opt_reg_int(odb, "-blocking",
+		"enable/disable blocking",
+		&blocking_opt, 0,
+		TRUE, NULL);
+
+
+
   opt_reg_note(odb,
 "  The cache config parameter <config> has the following format:\n"
 "\n"
@@ -758,6 +808,11 @@ sim_reg_options(struct opt_odb_t *odb)
   opt_reg_int(odb, "-cache:dl1lat",
 	      "l1 data cache hit latency (in cycles)",
 	      &cache_dl1_lat, /* default */1,
+	      /* print */TRUE, /* format */NULL);
+
+  opt_reg_int(odb, "-cache:victimlat",
+	      "l1 data cache hit latency (in cycles)",
+	      &cache_victim_lat, /* default */0,
 	      /* print */TRUE, /* format */NULL);
 
   opt_reg_string(odb, "-cache:dl2",
@@ -1003,6 +1058,8 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
   if (!mystricmp(cache_dl1_opt, "none"))
     {
       cache_dl1 = NULL;
+	  /* if cache_dl1 is NULL, so is victim buffer. ---ECE 252 HOMEWORK MODIFICATION--- */
+	  cache_victim = NULL;
 
       /* the level 2 D-cache cannot be defined */
       if (strcmp(cache_dl2_opt, "none"))
@@ -1017,6 +1074,22 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
       cache_dl1 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			       /* usize */0, assoc, cache_char2policy(c),
 			       dl1_access_fn, /* hit lat */cache_dl1_lat);
+	/* check whether victim buffer is defined. --ECE 252 HOMEWORK MODIFICATION--- */
+	  if (mystricmp(cache_victim_opt, "none"))
+	  {
+	  	/* scan the configuration of victim buffer. ---ECE 252 HOMEWORK MODIFICATION--- */
+	  	if(sscanf(cache_victim_opt, "%[^:]:%d:%d:%d:%c",
+		 name, &nsets, &bsize, &assoc, &c) != 5)
+		fatal("bad victim buffer parms");
+		printf("going to create victim buffer\n");
+	  	cache_victim = cache_create(name, nsets, bsize, FALSE,
+					0, assoc, cache_char2policy(c),
+					dl1_access_fn, cache_victim_lat);
+	  }else
+		{
+		printf("no victim buffer\n");
+		cache_victim=NULL;
+		}
 
       /* is the level 2 D-cache defined? */
       if (!mystricmp(cache_dl2_opt, "none"))
@@ -1306,6 +1379,50 @@ sim_reg_stats(struct stat_sdb_t *sdb)   /* stats database */
     cache_reg_stats(cache_il2, sdb);
   if (cache_dl1)
     cache_reg_stats(cache_dl1, sdb);
+  /* register victim buffer if it is defined. --ECE 252 HOMEWORK MODIFICATION--- */
+  if (cache_victim)
+	cache_reg_stats(cache_victim, sdb);
+	stat_reg_counter(sdb, "dl1 miss counter",
+                   "total number of dl1 miss",
+                   &dl1_misses, 0, NULL);
+/*
+stat_reg_counter(sdb, "write dl1 counter",
+                   "total number of dl1 write",
+                   &write_dl1_counter, 0, NULL);
+stat_reg_counter(sdb, "read dl1 counter",
+                   "total number of read dl1 ",
+                   &read_dl1_counter, 0, NULL);
+stat_reg_counter(sdb, "write_dl1_miss_counter",
+                   "total number",
+                   &write_dl1_miss_counter, 0, NULL);
+stat_reg_counter(sdb, "read dl1 miss counter",
+                   "total number of read dl1 miss",
+                   &read_dl1_miss_counter, 0, NULL);
+stat_reg_counter(sdb, "write dl1 hit counter",
+                   "total number of dl1 miss",
+                   &write_dl1_hit_counter, 0, NULL);
+stat_reg_counter(sdb, "read dl1 hit counter",
+                   "total number of dl1 miss",
+                   &read_dl1_hit_counter, 0, NULL);
+stat_reg_counter(sdb, "write victim counter",
+                   "total number ",
+                   &write_victim_counter, 0, NULL);
+stat_reg_counter(sdb, "read victim counter",
+                   "total number of dl1 miss",
+                   &read_victim_counter, 0, NULL);
+stat_reg_counter(sdb, "write victim miss counter",
+                   "total number of dl1 miss",
+                   &write_victim_miss_counter, 0, NULL);
+stat_reg_counter(sdb, "read victim miss counter",
+                   "total number of dl1 miss",
+                   &read_victim_miss_counter, 0, NULL);
+stat_reg_counter(sdb, "write victim hit counter",
+                   "total number of dl1 miss",
+                   &write_victim_hit_counter, 0, NULL);
+stat_reg_counter(sdb, "read victim hit counter",
+                   "total number of dl1 miss",
+                   &read_victim_hit_counter, 0, NULL);
+*/
   if (cache_dl2)
     cache_reg_stats(cache_dl2, sdb);
   if (itlb)
@@ -2172,11 +2289,14 @@ ruu_commit(void)
 	      /* stores must retire their store value to the cache at commit,
 		 try to get a store port (functional unit allocation) */
 	      fu = res_get(fu_pool, MD_OP_FUCLASS(LSQ[LSQ_head].op));
-	      if (fu)
+	      if ((fu && !blocking_opt) || (fu && blocking_opt && (sim_cycle>blocking_time)) )
 		{
+			
 		  /* reserve the functional unit */
 		  if (fu->master->busy)
 		    panic("functional unit already in use");
+
+		 
 
 		  /* schedule functional unit release event */
 		  fu->master->busy = fu->issuelat;
@@ -2185,11 +2305,55 @@ ruu_commit(void)
 		  if (cache_dl1)
 		    {
 		      /* commit store value to D-cache */
+			md_addr_t temp;			  
+			md_addr_t *repl_addr=&temp;
 		      lat =
 			cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
-				     NULL, 4, sim_cycle, NULL, NULL);
+				     NULL, 4, sim_cycle, NULL, repl_addr);
+			/*write_dl1_counter++;*/
 		      if (lat > cache_dl1_lat)
-			events |= PEV_CACHEMISS;
+			{
+				/*write_dl1_miss_counter++;*/
+
+ 				blocking_time=sim_cycle+lat;
+				/*
+				printf(" store get mem at cycle %d\n", sim_cycle);
+				printf(" store block mem until %d\n", blocking_time);
+				*/
+				if(cache_victim)
+				{
+					/*write_victim_counter++;*/
+					cache_victim->blk_access_fn=victim_access_fn;
+					long miss_ckp=cache_victim->misses;
+					int vlat=
+					cache_access(cache_victim, Write, (LSQ[LSQ_head].addr&~3),
+				     NULL, 4, sim_cycle, NULL, NULL);
+					cache_victim->blk_access_fn=dl1_access_fn;
+					if(cache_victim->misses>miss_ckp)
+					{
+						/*write_victim_miss_counter++;*/
+						
+						dl1_misses++;
+						int temp_m=cache_victim->misses;
+						int temp_h=cache_victim->hits;
+						vlat=cache_access(cache_victim, Write, repl_addr,
+				     NULL, 4, sim_cycle, NULL, NULL);
+						
+							cache_victim->misses=temp_m;
+						
+							cache_victim->hits=temp_h;
+							events |=PEV_CACHEMISS;
+					}else
+					{
+						/*write_victim_hit_counter++;*/
+						lat=cache_dl1_lat;
+						events=0;
+					}
+				}else 
+					events |=PEV_CACHEMISS;
+
+			}
+				/*write_dl1_hit_counter++;*/
 		    }
 
 		  /* all loads and stores must to access D-TLB */
@@ -2673,13 +2837,15 @@ ruu_issue(void)
 	      if (MD_OP_FUCLASS(rs->op) != NA)
 		{
 		  fu = res_get(fu_pool, MD_OP_FUCLASS(rs->op));
-		  if (fu)
+		  if ( (fu && !blocking_opt) || (fu && blocking_opt && (sim_cycle>blocking_time)) )
 		    {
 		      /* got one! issue inst to functional unit */
 		      rs->issued = TRUE;
 		      /* reserve the functional unit */
 		      if (fu->master->busy)
 			panic("functional unit already in use");
+
+			
 
 		      /* schedule functional unit release event */
 		      fu->master->busy = fu->issuelat;
@@ -2726,16 +2892,56 @@ ruu_issue(void)
 			      if (!spec_mode && !valid_addr)
 				sim_invalid_addrs++;
 
+				md_addr_t temp;
+				md_addr_t *repl_addr=&temp;
 			      /* no! go to the data cache if addr is valid */
 			      if (cache_dl1 && valid_addr)
 				{
+					/*read_dl1_counter++;*/
 				  /* access the cache if non-faulting */
 				  load_lat =
 				    cache_access(cache_dl1, Read,
 						 (rs->addr & ~3), NULL, 4,
-						 sim_cycle, NULL, NULL);
+						 sim_cycle, NULL, repl_addr);
 				  if (load_lat > cache_dl1_lat)
-				    events |= PEV_CACHEMISS;
+			{
+				blocking_time=sim_cycle+load_lat;
+				/*printf("at cycle %d, load mem until %d\n", sim_cycle, blocking_time);*/
+				/*read_dl1_miss_counter++;*/
+
+				if(cache_victim)
+				{
+					/*read_victim_counter++;*/
+					cache_victim->blk_access_fn=victim_access_fn;
+					long miss_ckp=cache_victim->misses;
+					int vlat=
+					cache_access(cache_victim, Read, (rs->addr & ~3),
+				     NULL, 4, sim_cycle, NULL, NULL);
+					cache_victim->blk_access_fn=dl1_access_fn;
+					if(cache_victim->misses>miss_ckp)
+					{
+						/*read_victim_miss_counter++;*/
+						
+						dl1_misses++;
+						int temp_m=cache_victim->misses;
+						int temp_h=cache_victim->hits;
+						vlat=cache_access(cache_victim, Read, repl_addr,
+				     NULL, 4, sim_cycle, NULL, NULL);
+						
+							cache_victim->misses=temp_m;
+						
+							cache_victim->hits=temp_h;
+							events |=PEV_CACHEMISS;
+					}else
+					{
+						/*read_victim_hit_counter++;*/
+						load_lat=cache_dl1_lat;
+						events=0;
+					}
+				}else 
+					events |=PEV_CACHEMISS;
+
+			}
 				}
 			      else
 				{

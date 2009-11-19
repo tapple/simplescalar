@@ -2471,7 +2471,7 @@ ruu_commit(void)
 				    {
 				      int dl2_miss=cache_dl2->misses;
 				      cache_access(cache_dl2, Write, (LSQ[LSQ_head].addr&~3),
-				      NULL, 4, sim_cycle, NULL, NULL);
+					  NULL, 4, sim_cycle, NULL, NULL);
 				      if(cache_dl2->misses > dl2_miss)	/*we miss the dl2*/
 					{
 					  /* insert the addr into our table, we can also do this in the dl2 miss handler */

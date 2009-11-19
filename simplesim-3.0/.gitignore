@@ -1,0 +1,10 @@
+*.o
+*.a
+sim-bpred
+sim-outorder
+sim-fast
+sim-safe
+sim-cache
+sim-eio
+sim-profile
+sysprobe

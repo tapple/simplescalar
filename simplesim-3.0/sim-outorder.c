@@ -165,6 +165,7 @@ static char *cache_victim_opt;
 
 /*prefetch buffer option*/
 static char *cache_pbuffer_opt;
+static char *prefetch_trace_table_opt;
 
 static int blocking_opt;
 
@@ -172,6 +173,7 @@ static int blocking_opt;
 static int cache_dl1_lat;
 static int cache_victim_lat;
 static int cache_pbuffer_lat;
+static int prefetch_trace_table_lat;
 
 /* l2 data cache config, i.e., {<config>|none} */
 static char *cache_dl2_opt;
@@ -230,7 +232,7 @@ static int res_fpalu;
 static int res_fpmult;
 
 
-static long dl1_misses=0;
+static sqword_t dl1_misses=0;
 /*
 static long read_dl1_counter=0;
 static long write_dl1_counter=0;
@@ -246,10 +248,10 @@ static long write_dl1_hit_counter=0;
 static long write_victim_hit_counter=0;
 */
 
-static long pbuffer_access_counter=0;
-static long pbuffer_miss_counter=0;
-static long pbuffer_hit_counter=0;
-static long pbuffer_evict_counter=0;
+static sqword_t pbuffer_access_counter=0;
+static sqword_t pbuffer_miss_counter=0;
+static sqword_t pbuffer_hit_counter=0;
+static sqword_t pbuffer_evict_counter=0;
 
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
@@ -414,6 +416,7 @@ static struct cache_t *cache_victim;
 
 /* prefetch buffer */
 static struct cache_t *cache_pbuffer;
+static struct cache_t *prefetch_trace_table;
 
 /* level 2 data cache */
 static struct cache_t *cache_dl2;
@@ -815,13 +818,18 @@ sim_reg_options(struct opt_odb_t *odb)
   /* victim buffer options ---ECE 252 HOMEWORK MODIFICATION--- */
 opt_reg_string(odb, "-cache:victim",
 		"victim buffer",
-		&cache_victim_opt, "victim:1:32:2:l",
+		&cache_victim_opt, "none",
 		TRUE, NULL);
 
 /* prefetch buffer options */
 opt_reg_string(odb, "-cache:pbuffer",
 		"prefetch buffer",
-		&cache_pbuffer_opt, "pbuffer:1:32:2:l",	/* default value TBD */
+		&cache_pbuffer_opt, "pbuffer:1:32:16:l",	/* default value TBD */
+		TRUE, NULL);
+
+opt_reg_string(odb, "-prefetch:trace",
+		"prefetch miss trace table",
+		&prefetch_trace_table_opt, "ptrace:2048:8:8:l",	/* default value TBD */
 		TRUE, NULL);
 
   opt_reg_int(odb, "-blocking",
@@ -1149,7 +1157,7 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 		printf("going to create prefetch buffer\n");
 	  	cache_pbuffer = cache_create(name, nsets, bsize, FALSE,
 					0, assoc, cache_char2policy(c),
-					dl1_access_fn, cache_pbuffer_lat);
+					pbuffer_access_fn, cache_pbuffer_lat);
 	  }else
 		{
 		printf("no prefetch buffer\n");

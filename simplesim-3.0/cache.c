@@ -401,6 +401,30 @@ cache_create(char *name,		/* name of the cache */
   return cp;
 }
 
+/* create and initialize a general cache structure. Has an extra
+ * parameter: allow_duplicates */
+struct cache_t *			/* pointer to cache created */
+cache_create_dup(char *name,		/* name of the cache */
+	     int nsets,			/* total number of sets in cache */
+	     int bsize,			/* block (line) size of cache */
+	     int balloc,		/* allocate data space for blocks? */
+	     int usize,			/* size of user data to alloc w/blks */
+	     int assoc,			/* associativity of cache */
+	     enum cache_policy policy,	/* replacement policy w/in sets */
+	     int allow_duplicates,	/* Max duplicates to allow */
+	     /* block access function, see description w/in struct cache def */
+	     unsigned int (*blk_access_fn)(enum mem_cmd cmd,
+					   md_addr_t baddr, int bsize,
+					   struct cache_blk_t *blk,
+					   tick_t now),
+	     unsigned int hit_latency)	/* latency in cycles for a hit */
+{
+  struct cache_t *cp = cache_create(name, nsets, bsize, balloc, usize,
+      assoc, policy, blk_access_fn, hit_latency);
+  cp->allow_duplicates = allow_duplicates;
+  return cp;
+}
+
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
 cache_char2policy(char c)		/* replacement policy as a char */

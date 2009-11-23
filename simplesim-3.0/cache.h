@@ -155,6 +155,7 @@ struct cache_t
   int usize;			/* user allocated data size */
   int assoc;			/* cache associativity */
   enum cache_policy policy;	/* cache replacement policy */
+  int allow_duplicates;		/* Max duplicates to allow */
   unsigned int hit_latency;	/* cache hit latency */
 
   /* miss/replacement handler, read/write BSIZE bytes starting at BADDR
@@ -220,6 +221,24 @@ cache_create(char *name,		/* name of the cache */
 	     int usize,			/* size of user data to alloc w/blks */
 	     int assoc,			/* associativity of cache */
 	     enum cache_policy policy,	/* replacement policy w/in sets */
+	     /* block access function, see description w/in struct cache def */
+	     unsigned int (*blk_access_fn)(enum mem_cmd cmd,
+					   md_addr_t baddr, int bsize,
+					   struct cache_blk_t *blk,
+					   tick_t now),
+	     unsigned int hit_latency);/* latency in cycles for a hit */
+
+/* create and initialize a general cache structure. Has an extra
+ * parameter: allow_duplicates */
+struct cache_t *			/* pointer to cache created */
+cache_create_dup(char *name,		/* name of the cache */
+	     int nsets,			/* total number of sets in cache */
+	     int bsize,			/* block (line) size of cache */
+	     int balloc,		/* allocate data space for blocks? */
+	     int usize,			/* size of user data to alloc w/blks */
+	     int assoc,			/* associativity of cache */
+	     enum cache_policy policy,	/* replacement policy w/in sets */
+	     int allow_duplicates,	/* Max duplicates to allow */
 	     /* block access function, see description w/in struct cache def */
 	     unsigned int (*blk_access_fn)(enum mem_cmd cmd,
 					   md_addr_t baddr, int bsize,

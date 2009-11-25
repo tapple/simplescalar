@@ -446,12 +446,13 @@ cache_config(struct cache_t *cp,	/* cache instance */
 	  "cache: %s: %d sets, %d byte blocks, %d bytes user data/block\n",
 	  cp->name, cp->nsets, cp->bsize, cp->usize);
   fprintf(stream,
-	  "cache: %s: %d-way, `%s' replacement policy, write-back\n",
+	  "cache: %s: %d-way, `%s' replacement policy, write-back%s\n",
 	  cp->name, cp->assoc,
 	  cp->policy == LRU ? "LRU"
 	  : cp->policy == Random ? "Random"
 	  : cp->policy == FIFO ? "FIFO"
-	  : (abort(), ""));
+	  : (abort(), ""),
+	  cp->allow_duplicates ? ", with duplicates" : "");
 }
 
 /* register cache stats */

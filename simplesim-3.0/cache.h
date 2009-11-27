@@ -319,7 +319,7 @@ cache_insert(struct cache_t *cp,	/* cache to access */
 	     void *vp,			/* ptr to buffer for input/output */
 	     int nbytes,		/* number of bytes to access */
 	     tick_t now,		/* time of access */
-	     byte_t *udata,		/* user data to attach to the block */
+	     byte_t **udata,		/* for return of user data ptr */
 	     md_addr_t *repl_addr,	/* for address of replaced block */
 	     enum duplicate_policy dup_policy);	/* What to do with duplicates */
 

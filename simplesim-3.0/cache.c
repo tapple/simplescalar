@@ -746,44 +746,68 @@ cache_access(struct cache_t *cp,	/* cache to access */
 }
 
 
-/* access a cache, perform a CMD operation on cache CP at address ADDR,
-   places NBYTES of data at *P, returns latency of operation if initiated
-   at NOW, places pointer to block user data in *UDATA, *P is untouched if
-   cache blocks are not allocated (!CP->BALLOC), UDATA should be NULL if no
-   user data is attached to blocks */
+/* Manually insert data vp and user data udata into a cache at address ADDR,
+   returns latency of operation if initiated at NOW, places pointer to
+   block user data in *UDATA, *P is untouched if cache blocks are not
+   allocated (!CP->BALLOC), UDATA should be NULL if no user data is
+   attached to blocks */
 unsigned int				/* latency of access in cycles */
 cache_insert(struct cache_t *cp,	/* cache to access */
 	     md_addr_t addr,		/* address of access */
 	     void *vp,			/* ptr to buffer for input/output */
 	     int nbytes,		/* number of bytes to access */
 	     tick_t now,		/* time of access */
-	     byte_t **udata,		/* for return of user data ptr */
-	     md_addr_t *repl_addr)	/* for address of replaced block */
+	     byte_t *udata,		/* user data to attach to the block */
+	     md_addr_t *repl_addr,	/* for address of replaced block */
+	     enum duplicate_policy dup_policy)	/* What to do with duplicates */
 {
   byte_t *p = vp;
   md_addr_t tag = CACHE_TAG(cp, addr);
   md_addr_t set = CACHE_SET(cp, addr);
   md_addr_t bofs = CACHE_BLK(cp, addr);
-  struct cache_blk_t *blk, *repl;
+  struct cache_blk_t *repl;
   int lat = 0;
+
+  cp->insertions++;
 
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
-  switch (cp->policy) {
-  case LRU:
-  case FIFO:
-    repl = cp->sets[set].way_tail;
-    update_way_list(&cp->sets[set], repl, Head);
-    break;
-  case Random:
-    {
-      int bindex = myrand() & (cp->assoc - 1);
-      repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
-    }
-    break;
-  default:
-    panic("bogus replacement policy");
+  repl = NULL;
+  switch (dup_policy) {
+    case DUP_KEEP_NEW:
+    case DUP_KEEP_OLD:
+      repl = cache_getBlock(cp, addr);
+      break;
+    case DUP_KEEP_BOTH:
+      repl = cache_getBlockUser(cp, addr, udata);
+    default:
+      panic("bogus duplication policy");
   }
+  if (dup_policy == DUP_KEEP_OLD && repl) {
+    /* If we can't replace an already existing block */
+    return lat;
+  }
+
+  if (!repl) { /* if there is nothing to overwrite, replace a block
+		  based on the replacement policy */
+    switch (cp->policy) {
+    case LRU:
+    case FIFO:
+      repl = cp->sets[set].way_tail;
+      update_way_list(&cp->sets[set], repl, Head);
+      break;
+    case Random:
+      {
+	int bindex = myrand() & (cp->assoc - 1);
+	repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
+      }
+      break;
+    default:
+      panic("bogus replacement policy");
+    }
+  }
+
+  /***** Start of writeback cleanup */
 
   /* remove this block from the hash bucket chain, if hash exists */
   if (cp->hsize)
@@ -824,6 +848,9 @@ cache_insert(struct cache_t *cp,	/* cache to access */
   repl->tag = tag;
   repl->status = CACHE_BLK_VALID;	/* dirty bit set on update */
 
+  /***** End of writeback cleanup; Now replace the block with the new
+   * contents */
+
   /* read data block */
   lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
 			   repl, now+lat);
@@ -831,16 +858,12 @@ cache_insert(struct cache_t *cp,	/* cache to access */
   /* copy data out of cache block */
   if (cp->balloc)
     {
-      CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
+      CACHE_BCOPY(Read, repl, bofs, p, nbytes);
     }
 
-  /* update dirty status */
-  if (cmd == Write)
-    repl->status |= CACHE_BLK_DIRTY;
-
-  /* get user block data, if requested and it exists */
+  /* set user block data, if requested and it exists */
   if (udata)
-    *udata = repl->user_data;
+    repl->user_data = udata;
 
   /* update block status */
   repl->ready = now+lat;
@@ -905,7 +928,7 @@ cache_getBlockUser(struct cache_t *cp,		/* cache instance to probe */
 {
   struct cache_blk_t *blk = NULL;
 
-  while (blk = cache_getNextBlock(cp, addr, blk)) {
+  while ((blk = cache_getNextBlock(cp, addr, blk))) {
     if (blk->user_data == user_data) {
       return blk;
     }
@@ -920,7 +943,7 @@ cache_getBlockUser(struct cache_t *cp,		/* cache instance to probe */
 struct cache_blk_t *			/* pointer to the block */
 cache_getNextBlock(struct cache_t *cp,		/* cache instance to probe */
 	    md_addr_t addr,		/* address of block to probe */
-	    cache_blk_t *start)		/* Block to start searching at */
+	    struct cache_blk_t *start)		/* Block to start searching at */
 {
   md_addr_t tag = CACHE_TAG(cp, addr);
   md_addr_t set = CACHE_SET(cp, addr);

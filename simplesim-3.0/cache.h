@@ -98,6 +98,14 @@
    speed block access, this macro decides if a cache is "highly associative" */
 #define CACHE_HIGHLY_ASSOC(cp)	((cp)->assoc > 4)
 
+/* What to do if you manually insert something for an address already in
+ * the cache (via cache_insert) */
+enum duplicate_policy {
+  DUP_KEEP_NEW,	/* Replace the old value with the new */
+  DUP_KEEP_OLD,	/* Leave the old value alone */
+  DUP_KEEP_BOTH	/* Put both in the cache under duplicated keys */
+};
+
 /* cache replacement policy */
 enum cache_policy {
   LRU,		/* replace least recently used block (perfect LRU) */
@@ -199,6 +207,7 @@ struct cache_t
   counter_t replacements;	/* total number of replacements at misses */
   counter_t writebacks;		/* total number of writebacks at misses */
   counter_t invalidations;	/* total number of external invalidations */
+  counter_t insertions;		/* total number of manual cache insertions */
 
   /* last block to hit, used to optimize cache hit processing */
   md_addr_t last_tagset;	/* tag of last line accessed */
@@ -283,6 +292,21 @@ cache_access(struct cache_t *cp,	/* cache to access */
 	     byte_t **udata,		/* for return of user data ptr */
 	     md_addr_t *repl_addr);	/* for address of replaced block */
 
+/* Manually insert data vp and user data udata into a cache at address ADDR,
+   returns latency of operation if initiated at NOW, places pointer to
+   block user data in *UDATA, *P is untouched if cache blocks are not
+   allocated (!CP->BALLOC), UDATA should be NULL if no user data is
+   attached to blocks */
+unsigned int				/* latency of access in cycles */
+cache_insert(struct cache_t *cp,	/* cache to access */
+	     md_addr_t addr,		/* address of access */
+	     void *vp,			/* ptr to buffer for input/output */
+	     int nbytes,		/* number of bytes to access */
+	     tick_t now,		/* time of access */
+	     byte_t *udata,		/* user data to attach to the block */
+	     md_addr_t *repl_addr,	/* for address of replaced block */
+	     enum duplicate_policy dup_policy);	/* What to do with duplicates */
+
 /* cache access functions, these are safe, they check alignment and
    permissions */
 #define cache_double(cp, cmd, addr, p, now, udata)	\
@@ -308,6 +332,21 @@ cache_probe(struct cache_t *cp,		/* cache instance to probe */
 struct cache_blk_t *			/* pointer to the block */
 cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
 	    md_addr_t addr);		/* address of block to probe */
+
+/* Look for a block with matching addr and user_data, and return it, if
+ * it exists. Handles duplicated addresses */
+struct cache_blk_t *			/* pointer to the block */
+cache_getBlockUser(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr,		/* address of block to probe */
+	    byte_t *user_data);		/* user data to match against*/
+
+/* Get the first block with the given address. If start is not NULL,
+ * start searching after that block in order to find potentially more
+ * matches (duplicates) */
+struct cache_blk_t *			/* pointer to the block */
+cache_getNextBlock(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr,		/* address of block to probe */
+	    struct cache_blk_t *start);		/* Block to start searching at */
 
 /* flush the entire cache, returns latency of the operation */
 unsigned int				/* latency of the flush operation */

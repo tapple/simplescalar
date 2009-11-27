@@ -745,6 +745,115 @@ cache_access(struct cache_t *cp,	/* cache to access */
   return (int) MAX(cp->hit_latency, (blk->ready - now));
 }
 
+
+/* access a cache, perform a CMD operation on cache CP at address ADDR,
+   places NBYTES of data at *P, returns latency of operation if initiated
+   at NOW, places pointer to block user data in *UDATA, *P is untouched if
+   cache blocks are not allocated (!CP->BALLOC), UDATA should be NULL if no
+   user data is attached to blocks */
+unsigned int				/* latency of access in cycles */
+cache_insert(struct cache_t *cp,	/* cache to access */
+	     md_addr_t addr,		/* address of access */
+	     void *vp,			/* ptr to buffer for input/output */
+	     int nbytes,		/* number of bytes to access */
+	     tick_t now,		/* time of access */
+	     byte_t **udata,		/* for return of user data ptr */
+	     md_addr_t *repl_addr)	/* for address of replaced block */
+{
+  byte_t *p = vp;
+  md_addr_t tag = CACHE_TAG(cp, addr);
+  md_addr_t set = CACHE_SET(cp, addr);
+  md_addr_t bofs = CACHE_BLK(cp, addr);
+  struct cache_blk_t *blk, *repl;
+  int lat = 0;
+
+  /* select the appropriate block to replace, and re-link this entry to
+     the appropriate place in the way list */
+  switch (cp->policy) {
+  case LRU:
+  case FIFO:
+    repl = cp->sets[set].way_tail;
+    update_way_list(&cp->sets[set], repl, Head);
+    break;
+  case Random:
+    {
+      int bindex = myrand() & (cp->assoc - 1);
+      repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
+    }
+    break;
+  default:
+    panic("bogus replacement policy");
+  }
+
+  /* remove this block from the hash bucket chain, if hash exists */
+  if (cp->hsize)
+    unlink_htab_ent(cp, &cp->sets[set], repl);
+
+  /* blow away the last block to hit */
+  cp->last_tagset = 0;
+  cp->last_blk = NULL;
+
+  /* write back replaced block data */
+  if (repl->status & CACHE_BLK_VALID)
+    {
+      cp->replacements++;
+
+      if (repl_addr)
+	*repl_addr = CACHE_MK_BADDR(cp, repl->tag, set);
+ 
+      /* don't replace the block until outstanding misses are satisfied */
+      lat += BOUND_POS(repl->ready - now);
+ 
+      /* stall until the bus to next level of memory is available */
+      lat += BOUND_POS(cp->bus_free - (now + lat));
+ 
+      /* track bus resource usage */
+      cp->bus_free = MAX(cp->bus_free, (now + lat)) + 1;
+
+      if (repl->status & CACHE_BLK_DIRTY)
+	{
+	  /* write back the cache block */
+	  cp->writebacks++;
+	  lat += cp->blk_access_fn(Write,
+				   CACHE_MK_BADDR(cp, repl->tag, set),
+				   cp->bsize, repl, now+lat);
+	}
+    }
+
+  /* update block tags */
+  repl->tag = tag;
+  repl->status = CACHE_BLK_VALID;	/* dirty bit set on update */
+
+  /* read data block */
+  lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
+			   repl, now+lat);
+
+  /* copy data out of cache block */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    repl->status |= CACHE_BLK_DIRTY;
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = repl->user_data;
+
+  /* update block status */
+  repl->ready = now+lat;
+
+  /* link this entry back into the hash table */
+  if (cp->hsize)
+    link_htab_ent(cp, &cp->sets[set], repl);
+
+  /* return latency of the operation */
+  return lat;
+}
+
+
 /* return non-zero if block containing address ADDR is contained in cache
    CP, this interface is used primarily for debugging and asserting cache
    invariants */
@@ -788,8 +897,9 @@ cache_probe(struct cache_t *cp,		/* cache instance to probe */
 }
 
 struct cache_blk_t *			/* pointer to the block */
-cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
-	    md_addr_t addr)		/* address of block to probe */
+cache_getNextBlock(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr,		/* address of block to probe */
+	    cache_blk_t *start)		/* Block to start searching at */
 {
   md_addr_t tag = CACHE_TAG(cp, addr);
   md_addr_t set = CACHE_SET(cp, addr);
@@ -802,7 +912,10 @@ cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
     /* higly-associativity cache, access through the per-set hash tables */
     int hindex = CACHE_HASH(cp, tag);
     
-    for (blk=cp->sets[set].hash[hindex];
+    if  (start) {blk=start->hash_next;}
+    else {blk=cp->sets[set].hash[hindex];}
+
+    for (;
 	 blk;
 	 blk=blk->hash_next)
     {	
@@ -813,6 +926,9 @@ cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
   else
   {
     /* low-associativity cache, linear search the way list */
+    if (start) {blk=start->way_next;}
+    else {blk=cp->sets[set].way_head;}
+
     for (blk=cp->sets[set].way_head;
 	 blk;
 	 blk=blk->way_next)
@@ -824,6 +940,14 @@ cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
   
   /* cache block not found */
   return NULL;
+}
+
+
+struct cache_blk_t *			/* pointer to the block */
+cache_getBlock(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr)		/* address of block to probe */
+{
+  return cache_getNextBlock(cp, addr, NULL);
 }
 
 /* flush the entire cache, returns latency of the operation */

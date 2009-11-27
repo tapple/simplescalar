@@ -292,6 +292,22 @@ cache_access(struct cache_t *cp,	/* cache to access */
 	     byte_t **udata,		/* for return of user data ptr */
 	     md_addr_t *repl_addr);	/* for address of replaced block */
 
+/* Same as cache_access, but abandons on a miss. Returns the negative of
+ * latency if there is a miss. access a cache, perform a CMD operation on cache CP at address ADDR,
+   places NBYTES of data at *P, returns latency of operation if initiated
+   at NOW, places pointer to block user data in *UDATA, *P is untouched if
+   cache blocks are not allocated (!CP->BALLOC), UDATA should be NULL if no
+   user data is attached to blocks */
+unsigned int				/* latency of access in cycles */
+cache_basic_access(struct cache_t *cp,	/* cache to access */
+	     enum mem_cmd cmd,		/* access type, Read or Write */
+	     md_addr_t addr,		/* address of access */
+	     void *vp,			/* ptr to buffer for input/output */
+	     int nbytes,		/* number of bytes to access */
+	     tick_t now,		/* time of access */
+	     byte_t **udata,		/* for return of user data ptr */
+	     md_addr_t *repl_addr);	/* for address of replaced block */
+
 /* Manually insert data vp and user data udata into a cache at address ADDR,
    returns latency of operation if initiated at NOW, places pointer to
    block user data in *UDATA, *P is untouched if cache blocks are not

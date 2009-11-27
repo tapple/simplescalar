@@ -746,6 +746,158 @@ cache_access(struct cache_t *cp,	/* cache to access */
 }
 
 
+/* Same as cache_access, but abandons on a miss. Returns the negative of
+ * latency if there is a miss. access a cache, perform a CMD operation on cache CP at address ADDR,
+   places NBYTES of data at *P, returns latency of operation if initiated
+   at NOW, places pointer to block user data in *UDATA, *P is untouched if
+   cache blocks are not allocated (!CP->BALLOC), UDATA should be NULL if no
+   user data is attached to blocks */
+unsigned int				/* latency of access in cycles */
+cache_basic_access(struct cache_t *cp,	/* cache to access */
+	     enum mem_cmd cmd,		/* access type, Read or Write */
+	     md_addr_t addr,		/* address of access */
+	     void *vp,			/* ptr to buffer for input/output */
+	     int nbytes,		/* number of bytes to access */
+	     tick_t now,		/* time of access */
+	     byte_t **udata,		/* for return of user data ptr */
+	     md_addr_t *repl_addr)	/* for address of replaced block */
+{
+  byte_t *p = vp;
+  md_addr_t tag = CACHE_TAG(cp, addr);
+  md_addr_t set = CACHE_SET(cp, addr);
+  md_addr_t bofs = CACHE_BLK(cp, addr);
+  struct cache_blk_t *blk;
+  int lat = 0;
+
+  /* default replacement address */
+  if (repl_addr)
+    *repl_addr = 0;
+
+  /* check alignments */
+  if ((nbytes & (nbytes-1)) != 0 || (addr & (nbytes-1)) != 0)
+    fatal("cache: access error: bad size or alignment, addr 0x%08x", addr);
+
+  /* access must fit in cache block */
+  /* FIXME:
+     ((addr + (nbytes - 1)) > ((addr & ~cp->blk_mask) + (cp->bsize - 1))) */
+  if ((addr + nbytes) > ((addr & ~cp->blk_mask) + cp->bsize))
+    fatal("cache: access error: access spans block, addr 0x%08x", addr);
+
+  /* permissions are checked on cache misses */
+
+  /* check for a fast hit: access to same block */
+  if (CACHE_TAGSET(cp, addr) == cp->last_tagset)
+    {
+      /* hit in the same block */
+      blk = cp->last_blk;
+      goto cache_fast_hit;
+    }
+    
+  if (cp->hsize)
+    {
+      /* higly-associativity cache, access through the per-set hash tables */
+      int hindex = CACHE_HASH(cp, tag);
+
+      for (blk=cp->sets[set].hash[hindex];
+	   blk;
+	   blk=blk->hash_next)
+	{
+	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	    goto cache_hit;
+	}
+    }
+  else
+    {
+      /* low-associativity cache, linear search the way list */
+      for (blk=cp->sets[set].way_head;
+	   blk;
+	   blk=blk->way_next)
+	{
+	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+	    goto cache_hit;
+	}
+    }
+
+  /* cache block not found */
+
+  /* **MISS** */
+  cp->misses++;
+
+  /* read data block */
+  lat += cp->blk_access_fn(Fail, CACHE_BADDR(cp, addr), cp->bsize,
+			   NULL, now+lat);
+
+  /* return latency of the operation, negated to signal a failed search */
+  return -lat;
+
+
+ cache_hit: /* slow hit handler */
+  
+  /* **HIT** */
+  cp->hits++;
+
+  /* copy data out of cache block, if block exists */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    blk->status |= CACHE_BLK_DIRTY;
+
+  /* if LRU replacement and this is not the first element of list, reorder */
+  if (blk->way_prev && cp->policy == LRU)
+    {
+      /* move this block to head of the way (MRU) list */
+      update_way_list(&cp->sets[set], blk, Head);
+    }
+
+  /* tag is unchanged, so hash links (if they exist) are still valid */
+
+  /* record the last block to hit */
+  cp->last_tagset = CACHE_TAGSET(cp, addr);
+  cp->last_blk = blk;
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = blk->user_data;
+
+  /* return first cycle data is available to access */
+  return (int) MAX(cp->hit_latency, (blk->ready - now));
+
+ cache_fast_hit: /* fast hit handler */
+  
+  /* **FAST HIT** */
+  cp->hits++;
+
+  /* copy data out of cache block, if block exists */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    blk->status |= CACHE_BLK_DIRTY;
+
+  /* this block hit last, no change in the way list */
+
+  /* tag is unchanged, so hash links (if they exist) are still valid */
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = blk->user_data;
+
+  /* record the last block to hit */
+  cp->last_tagset = CACHE_TAGSET(cp, addr);
+  cp->last_blk = blk;
+
+  /* return first cycle data is available to access */
+  return (int) MAX(cp->hit_latency, (blk->ready - now));
+}
+
+
 /* Manually insert data vp and user data udata into a cache at address ADDR,
    returns latency of operation if initiated at NOW, places pointer to
    block user data in *UDATA, *P is untouched if cache blocks are not
@@ -852,7 +1004,7 @@ cache_insert(struct cache_t *cp,	/* cache to access */
    * contents */
 
   /* read data block */
-  lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
+  lat += cp->blk_access_fn(Fetch, CACHE_BADDR(cp, addr), cp->bsize,
 			   repl, now+lat);
 
   /* copy data out of cache block */

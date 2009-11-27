@@ -476,17 +476,6 @@ victim_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	return 100;
 }
 
-static unsigned int
-pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
-	      md_addr_t baddr,		/* block address to access */
-	      int bsize,		/* size of block to access */
-	      struct cache_blk_t *blk,	/* ptr to block in upper level */
-	      tick_t now)		/* time of access */
-{	
-	/* do something here */
-	return 100;
-}
-
 /* dummy l1 d-cache miss handler */
 static unsigned int
 dummy_dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
@@ -533,6 +522,22 @@ dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	  return 0;
 	}
     }
+}
+
+static unsigned int
+pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
+	      md_addr_t baddr,		/* block address to access */
+	      int bsize,		/* size of block to access */
+	      struct cache_blk_t *blk,	/* ptr to block in upper level */
+	      tick_t now)		/* time of access */
+{	
+  if (cmd == Fetch) {
+    /* if asked to prefetch, fetch from the L2, just like the L1 would
+     * if reading */
+    return dl1_access_fn(Read, baddr, bsize, blk, now);
+  } else {
+    return 0;
+  }
 }
 
 /* l2 data cache block miss handler function */

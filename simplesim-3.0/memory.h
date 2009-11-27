@@ -86,7 +86,9 @@ struct mem_t {
 /* memory access command */
 enum mem_cmd {
   Read,			/* read memory from target (simulated prog) to host */
-  Write			/* write memory from host (simulator) to target */
+  Write,			/* write memory from host (simulator) to target */
+  Fetch,			/* Prefetch data into a cache */
+  Fail			/* Read a cache without finding what you were looking for */
 };
 
 /* memory access function type, this is a generic function exported for the

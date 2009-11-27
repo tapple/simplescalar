@@ -896,6 +896,27 @@ cache_probe(struct cache_t *cp,		/* cache instance to probe */
   return FALSE;
 }
 
+/* Look for a block with matching addr and user_data, and return it, if
+ * it exists. Handles duplicated addresses */
+struct cache_blk_t *			/* pointer to the block */
+cache_getBlockUser(struct cache_t *cp,		/* cache instance to probe */
+	    md_addr_t addr,		/* address of block to probe */
+	    byte_t *user_data)		/* user data to match against*/
+{
+  struct cache_blk_t *blk = NULL;
+
+  while (blk = cache_getNextBlock(cp, addr, blk)) {
+    if (blk->user_data == user_data) {
+      return blk;
+    }
+  }
+
+  return NULL;
+}
+
+/* Get the first block with the given address. If start is not NULL,
+ * start searching after that block in order to find potentially more
+ * matches (duplicates) */
 struct cache_blk_t *			/* pointer to the block */
 cache_getNextBlock(struct cache_t *cp,		/* cache instance to probe */
 	    md_addr_t addr,		/* address of block to probe */

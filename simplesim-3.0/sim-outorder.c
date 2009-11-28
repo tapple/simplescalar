@@ -524,6 +524,15 @@ dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
     }
 }
 
+#if 0
+void
+prefetch_for_addr(md_addr_t addr) {
+  static md_addr_t prev_addr;
+  lat = cache_insert(cache_dl2, cmd, baddr, NULL, bsize,
+		    /* now */now, /* pudata */NULL, /* repl addr */NULL);
+}
+#endif
+
 static unsigned int
 pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	      md_addr_t baddr,		/* block address to access */

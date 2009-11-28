@@ -95,7 +95,7 @@
 
 /* copy data out of a cache block to buffer indicated by argument pointer p */
 #define CACHE_BCOPY(cmd, blk, bofs, p, nbytes)	\
-  if (cmd == Read)							\
+  if (cmd == Read || cmd == Fetch)					\
     {									\
       switch (nbytes) {							\
       case 1:								\

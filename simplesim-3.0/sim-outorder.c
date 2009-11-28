@@ -567,7 +567,8 @@ pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
   if (cmd == Fetch) {
     /* if asked to prefetch, fetch from the L2, just like the L1 would
      * if reading */
-    return dl1_access_fn(Read, baddr, bsize, blk, now);
+    return cache_access(cache_dl2, cmd, baddr, NULL, bsize,
+			 /* now */now, /* pudata */NULL, /* repl addr */NULL);
   } else {
     return 0;
   }
@@ -585,6 +586,10 @@ dl2_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
   if (cmd == Read)
     {
       prefetch_for_addr(baddr, now);
+      return mem_access_latency(bsize);
+    }
+  else if (cmd == Fetch)
+    {
       return mem_access_latency(bsize);
     }
   else

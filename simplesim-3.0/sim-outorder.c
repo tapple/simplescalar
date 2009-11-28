@@ -1515,6 +1515,8 @@ sim_reg_stats(struct stat_sdb_t *sdb)   /* stats database */
     cache_reg_stats(cache_il2, sdb);
   if (cache_dl1)
     cache_reg_stats(cache_dl1, sdb);
+  if (prefetch_trace_table)
+    cache_reg_stats(prefetch_trace_table, sdb);
   if (cache_pbuffer)
     cache_reg_stats(cache_pbuffer, sdb);
   /* register victim buffer if it is defined. --ECE 252 HOMEWORK MODIFICATION--- */

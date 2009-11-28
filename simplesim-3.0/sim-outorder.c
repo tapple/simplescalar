@@ -534,6 +534,16 @@ prefetch_for_addr(md_addr_t addr) {
 #endif
 
 static unsigned int
+prefetch_trace_table_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
+	      md_addr_t baddr,		/* block address to access */
+	      int bsize,		/* size of block to access */
+	      struct cache_blk_t *blk,	/* ptr to block in upper level */
+	      tick_t now)		/* time of access */
+{	
+  return 0;
+}
+
+static unsigned int
 pbuffer_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	      md_addr_t baddr,		/* block address to access */
 	      int bsize,		/* size of block to access */
@@ -884,6 +894,12 @@ opt_reg_string(odb, "-prefetch:trace",
 	      &cache_pbuffer_lat, /* default */0,
 	      /* print */TRUE, /* format */NULL);
 
+  /* prefetch trace table latency */
+  opt_reg_int(odb, "-prefetch:tracelat",
+	      "prefetch trace table hit latency (in cycles)",
+	      &prefetch_trace_table_lat, /* default */0,
+	      /* print */TRUE, /* format */NULL);
+
   opt_reg_string(odb, "-cache:dl2",
 		 "l2 data cache config, i.e., {<config>|none}",
 		 &cache_dl2_opt, "ul2:1024:64:4:l",
@@ -1163,20 +1179,36 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 
 	  /* check whether prefetch buffer is defined. --ECE 252 PROJECT MODIFICATION--- */
 	  if (mystricmp(cache_pbuffer_opt, "none"))
-	  {
-	  	/* scan the configuration of prefetch buffer. ---ECE 252 PROJECT MODIFICATION--- */
-	  	if(sscanf(cache_pbuffer_opt, "%[^:]:%d:%d:%d:%c",
-		 name, &nsets, &bsize, &assoc, &c) != 5)
-		fatal("bad pbuffer buffer parms");
-		printf("going to create prefetch buffer\n");
-	  	cache_pbuffer = cache_create(name, nsets, bsize, FALSE,
-					0, assoc, cache_char2policy(c),
-					pbuffer_access_fn, cache_pbuffer_lat);
-	  }else
-		{
-		printf("no prefetch buffer\n");
-		cache_pbuffer=NULL;
-		}
+	    {
+	      /* scan the configuration of prefetch buffer. ---ECE 252 PROJECT MODIFICATION--- */
+	      if(sscanf(cache_pbuffer_opt, "%[^:]:%d:%d:%d:%c",
+		name, &nsets, &bsize, &assoc, &c) != 5)
+	      fatal("bad pbuffer buffer parms");
+	      cache_pbuffer = cache_create(name, nsets, bsize, FALSE,
+				      0, assoc, cache_char2policy(c),
+				      pbuffer_access_fn, cache_pbuffer_lat);
+	    }
+	  else
+	    {
+	      printf("no prefetch buffer\n");
+	      cache_pbuffer=NULL;
+	    }
+
+	  /* check whether prefetch trace table is defined. --ECE 252 PROJECT MODIFICATION--- */
+	  if (mystricmp(prefetch_trace_table_opt, "none"))
+	    {
+	      /* scan the configuration of prefetch buffer. ---ECE 252 PROJECT MODIFICATION--- */
+	      if(sscanf(prefetch_trace_table_opt, "%[^:]:%d:%d:%d:%c",
+		name, &nsets, &bsize, &assoc, &c) != 5)
+	      fatal("bad prefetch trace table parms");
+	      prefetch_trace_table = cache_create(name, nsets, bsize, FALSE,
+				      sizeof(md_addr_t), assoc, cache_char2policy(c),
+				      prefetch_trace_table_fn, prefetch_trace_table_lat);
+	    }
+	  else
+	    {
+	      prefetch_trace_table=NULL;
+	    }
 
       /* is the level 2 D-cache defined? */
       if (!mystricmp(cache_dl2_opt, "none"))

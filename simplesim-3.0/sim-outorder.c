@@ -248,11 +248,6 @@ static long write_dl1_hit_counter=0;
 static long write_victim_hit_counter=0;
 */
 
-static sqword_t pbuffer_access_counter=0;
-static sqword_t pbuffer_miss_counter=0;
-static sqword_t pbuffer_hit_counter=0;
-static sqword_t pbuffer_evict_counter=0;
-
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
 static int pcstat_nelt = 0;
@@ -484,7 +479,7 @@ dummy_dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	      struct cache_blk_t *blk,	/* ptr to block in upper level */
 	      tick_t now)		/* time of access */
 {
-  return 0;
+  return 100;
 }
 
 /* l1 data cache l1 block miss handler function */
@@ -1568,15 +1563,6 @@ stat_reg_counter(sdb, "read victim hit counter",
                    &read_victim_hit_counter, 0, NULL);
 */
 
-  /* register counters of prefetch buffer */
-  stat_reg_counter(sdb, "pbuffer access", "num of pbuffer access",
-                   &pbuffer_access_counter, /* initial value */0, /* format */NULL);
-  stat_reg_counter(sdb, "pbuffer hit", "num of pbuffer hit",
-                   &pbuffer_hit_counter, /* initial value */0, /* format */NULL);
-  stat_reg_counter(sdb, "pbuffer miss", "num of pbuffer miss",
-                   &pbuffer_miss_counter, /* initial value */0, /* format */NULL);  
-  stat_reg_counter(sdb, "pbuffer evict", "num of pbuffer evict",
-                   &pbuffer_evict_counter, /* initial value */0, /* format */NULL);                                    
   if (cache_dl2)
     cache_reg_stats(cache_dl2, sdb);
   if (itlb)
@@ -2510,7 +2496,7 @@ ruu_commit(void)
 			      if(pb_flag)	/*the data is in prefetch buffer */
 				{
 				  cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
-				  pbuffer_evict_counter++;
+				  cache_pbuffer->invalidations++;
 				}
 			    }
 			  if(!cache_victim && !cache_pbuffer)
@@ -3115,11 +3101,10 @@ ruu_issue(void)
 					}
 				      if(cache_pbuffer)
 					{
-					  pbuffer_access_counter++;
 					  int pb_flag=cache_probe(cache_pbuffer, (LSQ[LSQ_head].addr&~3) );
 					  if(pb_flag)	/*the data is in prefetch buffer */
 					    {
-					      pbuffer_hit_counter++;
+					      cache_pbuffer->hits++;
 					      /* now load it to dl1 and evit it from pbuffer */
 					      /*
 					      int old_miss=cache_dl1->misses;
@@ -3135,11 +3120,11 @@ ruu_issue(void)
 					      load_lat=cache_dl1_lat; /*no panalty */
 					      /* evict the data from prefetch buffer */
 					      cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
-					      pbuffer_evict_counter++;
+					      cache_pbuffer->invalidations++;
 					    }
 					  else
 					    {
-					      pbuffer_miss_counter++;
+					      cache_pbuffer->misses++;
 					      if(cache_dl2)
 						{
 						  int dl2_miss=cache_dl2->misses;

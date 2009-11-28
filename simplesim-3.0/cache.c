@@ -485,6 +485,9 @@ cache_reg_stats(struct cache_t *cp,	/* cache instance */
   sprintf(buf, "%s.invalidations", name);
   stat_reg_counter(sdb, buf, "total number of invalidations",
 		 &cp->invalidations, 0, NULL);
+  sprintf(buf, "%s.insertions", name);
+  stat_reg_counter(sdb, buf, "total number of insertions",
+		 &cp->insertions, 0, NULL);
   sprintf(buf, "%s.miss_rate", name);
   sprintf(buf1, "%s.misses / %s.accesses", name, name);
   stat_reg_formula(sdb, buf, "miss rate (i.e., misses/ref)", buf1, NULL);

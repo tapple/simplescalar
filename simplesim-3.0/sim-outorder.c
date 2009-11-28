@@ -3117,88 +3117,91 @@ ruu_issue(void)
 						 sim_cycle, NULL, repl_addr);
 					cache_dl1->blk_access_fn=dl1_access_fn;
 				  if (load_lat > cache_dl1_lat)
-			{
-				blocking_time=sim_cycle+load_lat;
-				/*printf("at cycle %d, load mem until %d\n", sim_cycle, blocking_time);*/
-				/*read_dl1_miss_counter++;*/
+				    {
+				      blocking_time=sim_cycle+load_lat;
+				      /*printf("at cycle %d, load mem until %d\n", sim_cycle, blocking_time);*/
+				      /*read_dl1_miss_counter++;*/
 
-				if(cache_victim)
-				{
-					/*read_victim_counter++;*/
-					cache_victim->blk_access_fn=victim_access_fn;
-					long miss_ckp=cache_victim->misses;
-					int vlat=
-					cache_access(cache_victim, Read, (rs->addr & ~3),
-				     NULL, 4, sim_cycle, NULL, NULL);
-					cache_victim->blk_access_fn=dl1_access_fn;
-					if(cache_victim->misses>miss_ckp)
+				      if(cache_victim)
 					{
-						/*read_victim_miss_counter++;*/
-						
-						dl1_misses++;
-						int temp_m=cache_victim->misses;
-						int temp_h=cache_victim->hits;
-						vlat=cache_access(cache_victim, Read, repl_addr,
-				     NULL, 4, sim_cycle, NULL, NULL);
-						
-							cache_victim->misses=temp_m;
-						
-							cache_victim->hits=temp_h;
-							events |=PEV_CACHEMISS;
-					}else
-					{
-						/*read_victim_hit_counter++;*/
-						load_lat=cache_dl1_lat;
-						events=0;
+					  /*read_victim_counter++;*/
+					  cache_victim->blk_access_fn=victim_access_fn;
+					  long miss_ckp=cache_victim->misses;
+					  int vlat=
+					  cache_access(cache_victim, Read, (rs->addr & ~3),
+					    NULL, 4, sim_cycle, NULL, NULL);
+					  cache_victim->blk_access_fn=dl1_access_fn;
+					  if(cache_victim->misses>miss_ckp)
+					    {
+					      /*read_victim_miss_counter++;*/
+					      
+					      dl1_misses++;
+					      int temp_m=cache_victim->misses;
+					      int temp_h=cache_victim->hits;
+					      vlat=cache_access(cache_victim, Read, repl_addr,
+						NULL, 4, sim_cycle, NULL, NULL);
+
+					      cache_victim->misses=temp_m;
+
+					      cache_victim->hits=temp_h;
+					      events |=PEV_CACHEMISS;
+					    }
+					  else
+					    {
+					      /*read_victim_hit_counter++;*/
+					      load_lat=cache_dl1_lat;
+					      events=0;
+					    }
 					}
-				}else 
-					events |=PEV_CACHEMISS;
-				if(cache_pbuffer)
-				{
-					pbuffer_access_counter++;
-					int pb_flag=cache_probe(cache_pbuffer, (LSQ[LSQ_head].addr&~3) );
-					if(pb_flag)	/*the data is in prefetch buffer */
+				      else 
 					{
-						pbuffer_hit_counter++;
-						/* now load it to dl1 and evit it from pbuffer */
-						/*
-						int old_miss=cache_dl1->misses;
-						int old_miss=cache_dl1->hits;
-						
-						cache_dl1->blk_access_fn=dummy_dl1_access_fn;
-						cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
-				     NULL, 4, sim_cycle, NULL, NULL);
-				     	cache_dl1->blk_access_fn=dl1_access_fn;
-				     	cache_dl1->misses=old_miss;
-				     	cache_dl1->hits=old_hit;
-				     	*/
-				     	load_lat=cache_dl1_lat; /*no panalty */
-				     	/* evict the data from prefetch buffer */
-				     	cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
-				     	pbuffer_evict_counter++;
-				     }else
-				     {
-				     	pbuffer_miss_counter++;
-				     	if(cache_dl2)
-				     	{
-				     		int dl2_miss=cache_dl2->misses;
-				     		load_lat+=cache_access(cache_dl2, Write, (LSQ[LSQ_head].addr&~3),
-				     		NULL, 4, sim_cycle, NULL, NULL);
-				     		if(cache_dl2->misses > dl2_miss)	/*we miss the dl2*/
-				     		{
-				     			/* insert the addr into our table, we can also do this in the dl2 miss handler */
-				     		}else
-				     		{
-				     			/* we hit dl2. Due to the infinite write buffer, no latency. Nothing need to be done here */
-				     		}
-				     	}
-				     	events |=PEV_CACHEMISS;
-				     	
-				     }
-				}
-				
-
-			}
+					  events |=PEV_CACHEMISS;
+					}
+				      if(cache_pbuffer)
+					{
+					  pbuffer_access_counter++;
+					  int pb_flag=cache_probe(cache_pbuffer, (LSQ[LSQ_head].addr&~3) );
+					  if(pb_flag)	/*the data is in prefetch buffer */
+					    {
+					      pbuffer_hit_counter++;
+					      /* now load it to dl1 and evit it from pbuffer */
+					      /*
+					      int old_miss=cache_dl1->misses;
+					      int old_miss=cache_dl1->hits;
+					      
+					      cache_dl1->blk_access_fn=dummy_dl1_access_fn;
+					      cache_access(cache_dl1, Write, (LSQ[LSQ_head].addr&~3),
+						NULL, 4, sim_cycle, NULL, NULL);
+					      cache_dl1->blk_access_fn=dl1_access_fn;
+					      cache_dl1->misses=old_miss;
+					      cache_dl1->hits=old_hit;
+					      */
+					      load_lat=cache_dl1_lat; /*no panalty */
+					      /* evict the data from prefetch buffer */
+					      cache_evict_addr(cache_pbuffer,(LSQ[LSQ_head].addr&~3), sim_cycle);
+					      pbuffer_evict_counter++;
+					    }
+					  else
+					    {
+					      pbuffer_miss_counter++;
+					      if(cache_dl2)
+						{
+						  int dl2_miss=cache_dl2->misses;
+						  load_lat+=cache_access(cache_dl2, Write, (LSQ[LSQ_head].addr&~3),
+						  NULL, 4, sim_cycle, NULL, NULL);
+						  if(cache_dl2->misses > dl2_miss)	/*we miss the dl2*/
+						    {
+						      /* insert the addr into our table, we can also do this in the dl2 miss handler */
+						    }
+						  else
+						    {
+						      /* we hit dl2. Due to the infinite write buffer, no latency. Nothing need to be done here */
+						    }
+						}
+					      events |=PEV_CACHEMISS;
+					    }
+					}
+				    }
 				}
 			      else
 				{

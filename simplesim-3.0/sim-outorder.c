@@ -1575,7 +1575,7 @@ stat_reg_counter(sdb, "read victim hit counter",
   stat_reg_counter(sdb, "pbuffer hit", "num of pbuffer hit",
                    &pbuffer_hit_counter, /* initial value */0, /* format */NULL);
   stat_reg_counter(sdb, "pbuffer miss", "num of pbuffer miss",
-                   &pbuffer_hit_counter, /* initial value */0, /* format */NULL);  
+                   &pbuffer_miss_counter, /* initial value */0, /* format */NULL);  
   stat_reg_counter(sdb, "pbuffer evict", "num of pbuffer evict",
                    &pbuffer_evict_counter, /* initial value */0, /* format */NULL);                                    
   if (cache_dl2)

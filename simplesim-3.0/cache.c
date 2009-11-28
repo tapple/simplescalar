@@ -929,9 +929,8 @@ cache_insert(struct cache_t *cp,	/* cache to access */
     case DUP_KEEP_NEW:
     case DUP_KEEP_OLD:
       repl = cache_getBlock(cp, addr);
-      break;
     case DUP_KEEP_BOTH:
-      repl = cache_getBlockUser(cp, addr, udata);
+      break;
     default:
       panic("bogus duplication policy");
   }
@@ -1015,7 +1014,7 @@ cache_insert(struct cache_t *cp,	/* cache to access */
 
   /* get user block data, if requested and it exists */
   if (udata)
-    *udata = blk->user_data;
+    *udata = repl->user_data;
 
   /* update block status */
   repl->ready = now+lat;

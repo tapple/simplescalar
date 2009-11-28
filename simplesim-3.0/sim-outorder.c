@@ -524,14 +524,28 @@ dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
     }
 }
 
-#if 0
 void
-prefetch_for_addr(md_addr_t addr) {
+prefetch_for_addr(md_addr_t addr, tick_t now) {
   static md_addr_t prev_addr;
-  lat = cache_insert(cache_dl2, cmd, baddr, NULL, bsize,
-		    /* now */now, /* pudata */NULL, /* repl addr */NULL);
+  md_addr_t *prefetch_addr;
+  struct cache_blk_t *blk = NULL;
+
+  /* prefetch all the stored addresses */
+  while ((blk = cache_getNextBlock(prefetch_trace_table, addr, blk))) {
+    prefetch_addr = (md_addr_t *)blk->user_data;
+    cache_insert(cache_pbuffer, *prefetch_addr, NULL, 0, now, 
+	NULL, NULL, DUP_KEEP_OLD);
+  }
+
+  /* put the address in the trace table */
+  if (prev_addr) {
+    md_addr_t *table_entry;
+    cache_insert(prefetch_trace_table, prev_addr, NULL, 0,
+		    now, (byte_t **)&table_entry, NULL, DUP_KEEP_BOTH);
+    *table_entry = addr;
+  }
+  prev_addr = addr;
 }
-#endif
 
 static unsigned int
 prefetch_trace_table_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
@@ -569,7 +583,10 @@ dl2_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 {
   /* this is a miss to the lowest level, so access main memory */
   if (cmd == Read)
-    return mem_access_latency(bsize);
+    {
+      prefetch_for_addr(baddr, now);
+      return mem_access_latency(bsize);
+    }
   else
     {
       /* FIXME: unlimited write buffers */

@@ -654,7 +654,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
   repl->status = CACHE_BLK_VALID;	/* dirty bit set on update */
 
   /* read data block */
-  lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
+  lat += cp->blk_access_fn(cmd == Fetch ? Fetch : Read, CACHE_BADDR(cp, addr), cp->bsize,
 			   repl, now+lat);
 
   /* copy data out of cache block */

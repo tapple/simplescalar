@@ -1,6 +1,6 @@
 #!/bin/bash
 COMMAND='../simplesim-3.0/sim-outorder'
-OUTPUT_DIR='run1'
+OUTPUT_DIR='run2'
 
 TABLE_SIZES=$(echo {1..5})
 TABLE_SIZES=${@:-$TABLE_SIZES}

@@ -26,15 +26,10 @@ TABLE_ASSOC[3]=16
 
 mkdir -p $OUTPUT_DIR
 
-#for table_size_i in {1..5}; do
-#for table_assoc_i in {1..3}; do
-#for buf_size_i in {1..3}; do
-#for bench in {1..3}; do
-
-for table_size_i in 1; do
-for table_assoc_i in 1; do
-for buf_size_i in 1; do
-for bench in 1; do
+for table_size_i in {1..5}; do
+for table_assoc_i in {1..3}; do
+for buf_size_i in {1..3}; do
+for bench in {1..3}; do
 
     buf_size=${BUF_SIZE[$buf_size_i]}
     table_size=${TABLE_SIZE[$table_size_i]}

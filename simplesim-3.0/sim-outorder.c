@@ -479,7 +479,7 @@ dummy_dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
 	      struct cache_blk_t *blk,	/* ptr to block in upper level */
 	      tick_t now)		/* time of access */
 {
-  return 100;
+  return 0;
 }
 
 /* l1 data cache l1 block miss handler function */
@@ -3053,12 +3053,14 @@ ruu_issue(void)
 				  /* access the cache if non-faulting */
 				  if(cache_pbuffer)
 				  	cache_dl1->blk_access_fn=dummy_dl1_access_fn;
-				  load_lat =
+				
+				long miss_counter=cache_dl1->misses;  
+				load_lat =
 				    cache_access(cache_dl1, Read,
 						 (rs->addr & ~3), NULL, 4,
 						 sim_cycle, NULL, repl_addr);
 					cache_dl1->blk_access_fn=dl1_access_fn;
-				  if (load_lat > cache_dl1_lat)
+				  if (cache_dl1->misses > miss_counter)
 				    {
 				      blocking_time=sim_cycle+load_lat;
 				      /*printf("at cycle %d, load mem until %d\n", sim_cycle, blocking_time);*/

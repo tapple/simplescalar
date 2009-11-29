@@ -46,7 +46,7 @@ for bench in {1..3}; do
     table_opt="-prefetch:trace ptrace:$table_sets:8:$table_assoc:l"
     output_file=$(printf '%s/ts%05d-ta%02d-bs%02d-%s.txt\n' $OUTPUT_DIR $table_size $table_assoc $buf_size $bench_name)
 
-    echo $COMMAND $table_opt $buf_opt $bench_opt 2> $output_file
+    $COMMAND $table_opt $buf_opt $bench_opt 2> $output_file
 
 done
 done

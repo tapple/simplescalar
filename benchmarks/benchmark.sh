@@ -44,7 +44,7 @@ for bench in 1; do
     bench_name=${BENCHMARK[bench]}
     bench_opt=${!bench_name}
 
-    buf_opt="-cache:pbuffer pbuffer:1:128:$buf_size:l"
+    buf_opt="-cache:pbuffer pbuffer:1:32:$buf_size:l"
     table_opt="-prefetch:trace ptrace:$table_sets:8:$table_assoc:l"
     output_file=$(printf '%s/ts%05d-ta%02d-bs%02d-%s.txt\n' $OUTPUT_DIR $table_size $table_assoc $buf_size $bench_name)
 

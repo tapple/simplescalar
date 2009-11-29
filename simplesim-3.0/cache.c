@@ -1127,7 +1127,7 @@ cache_getNextBlock(struct cache_t *cp,		/* cache instance to probe */
     if (start) {blk=start->way_next;}
     else {blk=cp->sets[set].way_head;}
 
-    for (blk=cp->sets[set].way_head;
+    for (;
 	 blk;
 	 blk=blk->way_next)
     {

@@ -4,9 +4,6 @@ import os, os.path
 import sys
 import string
 
-for arg in sys.argv[1:]:
-    print arg
-
 def jumpToStats(aFile):
     """Read forward in file to the beginning of the simplescalar
     statistics section"""

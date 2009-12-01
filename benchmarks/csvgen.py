@@ -46,14 +46,15 @@ def statsFileIter(filename):
         aFile.close()
 
 def parseFilename(filename):
-    """Return the table size, associativity, and buffer size given the
-    filename"""
+    """Return the table size, associativity, buffer size, and benchmark
+    name given the filename"""
     return [int(str.strip(string.ascii_letters + '.')) for str in
-            os.path.basename(filename).split('-')[:-1]]
+            os.path.basename(filename).split('-')[:-1]] + \
+        [os.path.basename(filename).split('.')[0].split('-')[-1]]
 
 def csvHeader(filename):
-    return ['filename', 'table size', 'table assoc', 'buffer size'] + \
-        [row[0] for row in statsFileIter(filename)]
+    return ['filename', 'table size', 'table assoc', 'buffer size',
+    'benchmark'] + [row[0] for row in statsFileIter(filename)]
 
 def csvRow(filename):
     return [filename] + parseFilename(filename) + \
